@@ -1,0 +1,2060 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<base target="_top">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16345c">
+<title>impactTV 端末管理</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="端末管理">
+<style>
+:root{
+  --bg:#eef2f7;--card:#ffffff;--ink:#0e1a2b;--sub:#33415c;--muted:#64748b;--line:#dde4ec;
+  --primary:#16345c;--primary-ink:#ffffff;--accent:#f5b70a;--accent-ink:#1a2b45;--focus:#2f6fed;
+  --ok:#15803d;--warn:#b45309;--danger:#dc2626;--info:#1d4ed8;
+  --ok-bg:#e7f5ec;--warn-bg:#fdf3e0;--danger-bg:#fdeaea;--info-bg:#e8effd;--chip-on:#e3ecfb;
+  --radius:18px;--shadow:0 1px 2px rgba(16,42,67,.05),0 8px 24px rgba(16,42,67,.07);
+  --font:system-ui,-apple-system,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI","Yu Gothic",Meiryo,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0b1220;--card:#131c2e;--ink:#e8eef6;--sub:#c3cedc;--muted:#93a1b5;--line:#2a3750;
+    --primary:#6d9be0;--primary-ink:#08111f;--accent:#f5b70a;--accent-ink:#1a2b45;--focus:#93c5fd;
+    --ok:#4ade80;--warn:#fbbf24;--danger:#f87171;--info:#93b4ff;
+    --ok-bg:#10301e;--warn-bg:#33260a;--danger-bg:#3a1515;--info-bg:#15254a;--chip-on:#1b2d52;
+    --shadow:none;color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:16px;line-height:1.6;-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.i{width:22px;height:22px;flex:0 0 auto}
+.file{position:absolute;left:-200px;top:0;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none}
+
+/* top bar */
+.bar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:2px;min-height:56px;padding:env(safe-area-inset-top) 6px 0;background:linear-gradient(135deg,#16345c 0%,#1e4a86 100%);color:#fff}
+@media (prefers-color-scheme:dark){.bar{background:#0f1a2e;border-bottom:1px solid var(--line)}}
+.bar-title{flex:1;font-weight:700;font-size:17px;padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.icon-btn{width:48px;height:48px;border:0;border-radius:12px;background:transparent;color:inherit;display:grid;place-items:center}
+.icon-btn:active{background:rgba(255,255,255,.12)}
+.view{max-width:560px;margin:0 auto;padding:16px 16px calc(40px + env(safe-area-inset-bottom))}
+
+/* blocks */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;margin:0 0 12px}
+.sec{font-size:15px;color:var(--sub);margin:22px 4px 8px;display:flex;align-items:baseline;gap:8px}
+.sec small{color:var(--muted);font-weight:400}
+.hello{margin:2px 4px 12px;color:var(--sub);font-weight:600}
+.tip{margin:8px 4px 16px;color:var(--muted);font-size:14px;text-align:center}
+.hint{margin:6px 0 12px;color:var(--muted);font-size:13px}
+.empty{color:var(--muted);text-align:center;padding:16px 8px}
+.foot{margin:28px 0 0;color:var(--muted);font-size:13px;text-align:center}
+.mono{font-family:var(--mono);letter-spacing:.02em}
+.warn-text{color:var(--warn)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 10px}
+.stack{display:grid;gap:10px}
+.linklike{border:0;background:none;color:var(--info);padding:6px;font-weight:600;display:inline-flex;align-items:center;gap:4px}
+.linklike .i{width:16px;height:16px}
+
+/* buttons */
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:54px;padding:10px 14px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-weight:700;font-size:16px;text-align:center;text-decoration:none;box-shadow:var(--shadow);user-select:none;-webkit-user-select:none}
+.btn:active{transform:scale(.985)}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:var(--primary-ink)}
+.btn.danger{background:var(--danger);border-color:var(--danger);color:#fff}
+.btn.okb{background:var(--ok);border-color:var(--ok);color:#fff}
+@media (prefers-color-scheme:dark){.btn.danger,.btn.okb{color:#0b1220}}
+.btn.ghost{background:transparent;box-shadow:none}
+.btn.small{width:auto;min-height:44px;padding:6px 12px;font-size:14px;border-radius:12px;box-shadow:none}
+.btn.hero{min-height:96px;font-size:21px;border-radius:22px;flex-direction:column;gap:2px;margin-top:4px}
+.btn.hero .i{width:34px;height:34px}
+.btn.hero small{font-size:13px;font-weight:500;opacity:.85}
+.btn[disabled]{opacity:.45;pointer-events:none}
+.btn.left{justify-content:flex-start;text-align:left}
+.btn .grow{flex:1}
+
+/* notes */
+.note{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;border-radius:14px;padding:12px 14px;margin:0 0 12px;border:1px solid transparent;font-size:14px;line-height:1.55;color:var(--ink)}
+.note .i{margin-top:1px}
+.note.info{background:var(--info-bg);border-color:color-mix(in srgb,var(--info) 30%,transparent)}
+.note.warn{background:var(--warn-bg);border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
+.note.danger{background:var(--danger-bg);border-color:color-mix(in srgb,var(--danger) 35%,transparent)}
+.note.ok{background:var(--ok-bg);border-color:color-mix(in srgb,var(--ok) 35%,transparent)}
+button.note{font:inherit;cursor:pointer}
+
+/* status */
+.badge{display:inline-flex;align-items:center;gap:6px;padding:1px 10px 1px 8px;border-radius:999px;background:var(--bg);border:1px solid var(--line);font-size:13px;font-weight:700;white-space:nowrap;color:var(--ink)}
+.badge i{width:10px;height:10px;border-radius:50%;background:var(--c);flex:0 0 auto}
+.pill{display:inline-flex;align-items:center;padding:6px 16px;border-radius:999px;background:var(--c);color:#fff;font-weight:800;font-size:17px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat{display:flex;align-items:center;gap:8px;min-height:52px;padding:8px 12px;border-radius:14px;border:1px solid var(--line);background:var(--card);text-align:left;box-shadow:var(--shadow)}
+.stat i{width:12px;height:12px;border-radius:50%;background:var(--c);flex:0 0 auto}
+.stat span{flex:1;font-size:13px;line-height:1.3;color:var(--sub)}
+.stat b{font-size:20px;font-variant-numeric:tabular-nums}
+.stat.zero b{color:var(--muted);font-weight:500}
+
+/* lists */
+.list{padding:4px 0}
+.li{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.li:last-child{border-bottom:0}
+button.li,.li-main{display:flex;flex-direction:column;align-items:stretch;gap:2px;flex:1;min-width:0;border:0;background:transparent;text-align:left;padding:0}
+button.li{padding:10px 14px;width:100%;border-bottom:1px solid var(--line)}
+.li-top{display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:700}
+.li-sub{font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+.kind{flex:0 0 auto;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-weight:800}
+.kind.ok{background:var(--ok-bg);color:var(--ok)}
+.kind.moved{background:var(--warn-bg);color:var(--warn)}
+.kind.new{background:var(--info-bg);color:var(--info)}
+.kind .i{width:20px;height:20px}
+.x-btn{flex:0 0 auto;width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:transparent;display:grid;place-items:center;color:var(--muted)}
+
+/* device card */
+.serial{font-family:var(--mono);font-size:26px;font-weight:800;letter-spacing:.03em;word-break:break-all;line-height:1.25;margin:2px 0 10px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:12px 0 0;font-size:15px}
+.kv dt{color:var(--muted);font-size:13px;padding-top:2px}
+.kv dd{margin:0;word-break:break-word}
+.place{font-size:18px;font-weight:700;margin:10px 0 0;display:flex;gap:6px;align-items:flex-start}
+.place .i{margin-top:3px;color:var(--muted)}
+.hist{padding:0}
+.hist li{list-style:none;padding:10px 14px;border-bottom:1px solid var(--line);font-size:14px}
+.hist li:last-child{border-bottom:0}
+.hist .h-top{display:flex;justify-content:space-between;gap:8px;font-weight:700}
+.hist .h-sub{color:var(--muted);font-size:13px}
+.hist .undone{text-decoration:line-through;opacity:.6}
+.loading{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;margin:4px 0}
+
+/* form */
+.field{display:block;margin:0 0 14px}
+.field>span,.label{display:block;font-weight:700;font-size:14px;margin:0 0 6px;color:var(--sub)}
+.req{color:var(--danger);font-size:12px;margin-left:4px}
+input[type=text],input[type=password],input[type=search],select,textarea{width:100%;min-height:52px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);font-size:17px}
+textarea{min-height:88px;resize:vertical;line-height:1.5}
+input.big{font-family:var(--mono);font-size:22px;letter-spacing:.04em;text-transform:uppercase}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{min-height:46px;padding:8px 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);font-weight:600;display:inline-flex;align-items:center;gap:8px;text-align:left}
+.chip i.dot{width:12px;height:12px;border-radius:50%;background:var(--c)}
+.chip[aria-pressed="true"]{border-color:var(--primary);background:var(--chip-on);box-shadow:inset 0 0 0 1.5px var(--primary)}
+.chip.status[aria-pressed="true"]{border-color:var(--c);box-shadow:inset 0 0 0 1.5px var(--c)}
+.chip small{display:block;font-weight:400;font-size:12px;color:var(--muted);line-height:1.3}
+.chips.col{flex-direction:column}
+.chips.col .chip{width:100%}
+.picker{display:flex;align-items:center;gap:10px;width:100%;min-height:56px;padding:10px 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);text-align:left;font-size:17px;font-weight:700}
+.picker .grow{flex:1}
+.picker .ph{color:var(--muted);font-weight:500}
+.photos{display:flex;gap:10px;flex-wrap:wrap}
+.thumb{position:relative;width:92px;height:92px;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:var(--bg)}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.thumb button{position:absolute;top:4px;right:4px;width:30px;height:30px;border-radius:50%;border:0;background:rgba(0,0,0,.65);color:#fff;font-weight:800}
+.thumb.add{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:12px;color:var(--sub);border-style:dashed;cursor:pointer}
+.sticky-actions{position:sticky;bottom:0;padding:12px 0 calc(8px + env(safe-area-inset-bottom));background:linear-gradient(transparent,var(--bg) 30%);margin-top:8px}
+.check{display:flex;gap:12px;align-items:flex-start;padding:10px 0;font-weight:600}
+.check input{width:24px;height:24px;margin-top:1px;flex:0 0 auto;accent-color:var(--primary)}
+.search-row{position:relative}
+.filters{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 10px;margin:0 -2px;scrollbar-width:none}
+.filters::-webkit-scrollbar{display:none}
+.filters .chip{white-space:nowrap;min-height:40px;padding:6px 12px;font-size:14px}
+
+/* done */
+.done-mark{width:84px;height:84px;border-radius:50%;display:grid;place-items:center;margin:12px auto 10px;background:var(--ok-bg);color:var(--ok)}
+.done-mark .i{width:48px;height:48px;stroke-width:2.6}
+.done-title{text-align:center;font-size:21px;margin:0 0 4px}
+.center{text-align:center}
+.progress{height:10px;border-radius:99px;background:var(--line);overflow:hidden;margin:8px 0 2px}
+.progress i{display:block;height:100%;background:var(--ok);border-radius:99px}
+.flash{border-radius:14px;padding:12px 14px;margin:0 0 12px;font-weight:700;display:flex;gap:10px;align-items:center}
+.flash.ok{background:var(--ok-bg);color:var(--ok)}
+.flash.moved,.flash.dup,.flash.bad{background:var(--warn-bg);color:var(--warn)}
+.flash.new{background:var(--info-bg);color:var(--info)}
+.flash .mono{color:var(--ink)}
+details.card>summary{cursor:pointer;font-weight:700;min-height:32px;list-style-position:inside}
+
+/* overlays */
+.overlay{position:fixed;inset:0;z-index:80;background:rgba(15,23,42,.38);display:grid;place-items:center;padding:20px}
+.busy-box{background:var(--card);color:var(--ink);padding:18px 22px;border-radius:16px;display:flex;gap:14px;align-items:center;max-width:320px;white-space:pre-line;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.spinner{width:28px;height:28px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--primary);animation:spin .8s linear infinite;flex:0 0 auto}
+.spinner.sm{width:16px;height:16px;border-width:2px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.toast{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top));transform:translateX(-50%);z-index:90;background:#0f172a;color:#fff;padding:10px 10px 10px 16px;border-radius:14px;display:flex;gap:10px;align-items:center;width:max-content;max-width:calc(100vw - 32px);box-shadow:0 8px 24px rgba(0,0,0,.3);font-weight:600}
+@media (prefers-color-scheme:dark){.toast{background:#e8eef6;color:#0b1220}.toast button{color:#1d4ed8!important}}
+.toast button{border:0;background:transparent;color:#7dd3fc;font-weight:800;min-height:40px;padding:0 8px;white-space:nowrap}
+.modal{position:fixed;inset:0;z-index:70;background:rgba(15,23,42,.5);display:flex;align-items:flex-end;justify-content:center}
+.sheet{width:100%;max-width:560px;max-height:92vh;overflow:auto;background:var(--card);border-radius:22px 22px 0 0;padding:20px 16px calc(18px + env(safe-area-inset-bottom));box-shadow:0 -10px 30px rgba(0,0,0,.2)}
+.sheet.tall{height:92vh;display:flex;flex-direction:column}
+.sheet h3{margin:0 0 8px;font-size:19px}
+.sheet .body{margin:0 0 16px;color:var(--sub);white-space:pre-line}
+.sheet .scroll{flex:1;overflow:auto;margin:8px -16px 0;padding:0 16px}
+@media (min-width:720px){.modal{align-items:center}.sheet{border-radius:22px}}
+
+/* scanner */
+.scanner{position:fixed;inset:0;z-index:60;background:#000;color:#fff;overflow:hidden}
+.scanner video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.scan-frame{position:absolute;left:50%;top:44%;width:min(84vw,440px);height:min(62vw,320px);transform:translate(-50%,-50%);border-radius:20px;box-shadow:0 0 0 200vmax rgba(0,0,0,.45);border:3px solid rgba(255,255,255,.92);transition:border-color .15s}
+.scan-frame.hit{border-color:#4ade80}
+.scan-line{position:absolute;left:6%;right:6%;top:50%;height:2px;background:#fb7185;box-shadow:0 0 8px #fb7185;animation:sweep 1.8s ease-in-out infinite alternate}
+@keyframes sweep{from{top:12%}to{top:88%}}
+.scan-top{position:absolute;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top) + 8px) 10px 16px;display:flex;justify-content:space-between;align-items:center;gap:8px;background:linear-gradient(rgba(0,0,0,.7),transparent)}
+.scan-top .t{font-weight:700;text-align:center;flex:1}
+.scan-bottom{position:absolute;left:0;right:0;bottom:0;padding:18px 16px calc(16px + env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(0,0,0,.8) 30%)}
+.scan-hint{text-align:center;font-weight:700;margin:0 0 10px;text-shadow:0 1px 3px #000}
+.scan-last{min-height:48px;border-radius:12px;padding:10px 12px;margin:0 0 10px;background:rgba(255,255,255,.14);font-weight:700;text-align:center}
+.scan-last.ok{background:rgba(22,163,74,.85)}
+.scan-last.warn{background:rgba(202,138,4,.9)}
+.scan-btn{min-height:48px;padding:8px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.35);background:rgba(15,23,42,.55);color:#fff;font-weight:700;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-align:center;cursor:pointer}
+.scan-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.scan-actions .wide{grid-column:1 / -1;background:#fff;color:#0f172a;border-color:#fff}
+@media (prefers-reduced-motion:reduce){.scan-line,.spinner{animation:none}.btn:active{transform:none}}
+
+/* v2: ブランド・デモ表示・画面遷移・ボトムナビ */
+.bar-logo{display:grid;place-items:center;width:32px;height:32px;margin-left:6px;flex:0 0 auto}
+.bar-logo svg{width:22px;height:22px}
+.demo-pill{flex:0 0 auto;margin:0 4px;padding:3px 11px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-size:11px;font-weight:800;letter-spacing:.03em}
+.btn.hero.scan{background:var(--accent);color:var(--accent-ink);border-color:transparent;box-shadow:0 8px 20px rgba(245,183,10,.35)}
+@keyframes viewIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.view-enter{animation:viewIn .22s ease}
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;justify-content:space-around;align-items:center;height:calc(62px + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);background:var(--card);border-top:1px solid var(--line);box-shadow:0 -6px 20px rgba(16,42,67,.06)}
+.tabbar[hidden]{display:none}
+.tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:64px;height:100%;padding:6px 8px 0;border:0;background:transparent;color:var(--muted);font-size:11px;font-weight:600}
+.tab .i{width:24px;height:24px}
+.tab.on{color:var(--primary);font-weight:800}
+.tab-gap{width:72px;flex:0 0 auto}
+.tab-fab{position:absolute;left:50%;top:0;margin-top:-22px;transform:translateX(-50%);width:56px;height:56px;border-radius:50%;border:4px solid var(--bg);background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;box-shadow:0 6px 16px rgba(245,183,10,.4);cursor:pointer;padding:0}
+.tab-fab:active{transform:translateX(-50%) scale(.94)}
+.tab-fab .i{width:26px;height:26px}
+body.tabbar-on .view{padding-bottom:calc(100px + env(safe-area-inset-bottom))}
+@media (prefers-reduced-motion:reduce){.view-enter{animation:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <button class="icon-btn" id="btnBack" type="button" aria-label="戻る" hidden></button>
+    <span class="bar-logo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#f5b70a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5v14M7 5v14M10.5 5v14M14 5v14M16.5 5v14M20 5v14"/></svg></span>
+    <div class="bar-title" id="barTitle">impactTV 端末管理</div>
+    <span class="demo-pill" id="demoPill" hidden>デモ</span>
+    <button class="icon-btn" id="btnSettings" type="button" aria-label="設定" hidden></button>
+  </header>
+  <main id="view" class="view" tabindex="-1"><div class="loading"><span class="spinner sm"></span>読み込み中…</div></main>
+</div>
+
+<div id="busy" class="overlay" hidden><div class="busy-box"><span class="spinner"></span><span id="busyText">通信中…</span></div></div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<div id="modal" class="modal" hidden></div>
+
+<section id="scanner" class="scanner" hidden aria-label="バーコード読み取り">
+  <video id="video" playsinline muted autoplay></video>
+  <div class="scan-frame" id="scanFrame"><div class="scan-line"></div></div>
+  <div class="scan-top">
+    <button class="scan-btn" id="scanClose" type="button">閉じる</button>
+    <div class="t" id="scanTitle">読み取り</div>
+    <button class="scan-btn" id="scanTorch" type="button" hidden>ライト</button>
+  </div>
+  <div class="scan-bottom">
+    <p class="scan-hint" id="scanHint">黄色いシールのバーコードを枠に入れてください</p>
+    <div class="scan-last" id="scanLast" hidden></div>
+    <div class="scan-actions">
+      <label class="scan-btn" for="camInput">撮影して読み取る</label>
+      <button class="scan-btn" id="scanManual" type="button">番号を入力</button>
+      <button class="scan-btn wide" id="scanDone" type="button" hidden>読み取りを終える</button>
+    </div>
+  </div>
+</section>
+
+<input type="file" id="camInput" class="file" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
+<input type="file" id="pickInput" class="file" accept="image/*" tabindex="-1" aria-hidden="true">
+<input type="file" id="photoInput" class="file" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
+<input type="file" id="photoPick" class="file" accept="image/*" tabindex="-1" aria-hidden="true">
+
+<nav id="tabbar" class="tabbar" hidden aria-label="メニュー">
+  <button type="button" class="tab" id="tabHome" data-tab="home"></button>
+  <button type="button" class="tab" id="tabList" data-tab="list"></button>
+  <span class="tab-gap" aria-hidden="true"></span>
+  <button type="button" class="tab" id="tabSettings" data-tab="settings"></button>
+  <button type="button" class="tab-fab" id="tabScan" aria-label="バーコードを読み取る"></button>
+</nav>
+
+<script src="config.js"></script>
+<script>
+(function () {
+'use strict';
+
+/* =========================================================
+ * 設定
+ *  通常は config.js（window.ITV_CONFIG）で上書きします。
+ *  そちらの API_URL に GASの「ウェブアプリのURL（…/exec）」を
+ *  入れてください。空のままだとデモモードで起動します。
+ * ========================================================= */
+var CONFIG = Object.assign({
+  API_URL: '',
+  SCANNER_LIB_URL: 'https://fastly.jsdelivr.net/npm/barcode-detector@3.2.2/dist/iife/ponyfill.js',
+  WASM_URL: '',
+  ZXING_JS_URL: 'https://fastly.jsdelivr.net/npm/@zxing/library@0.23.0/umd/index.min.js',
+  FORCE_POLYFILL: false
+}, window.ITV_CONFIG || {});
+
+var APP_VERSION = '2.0.0';
+var IS_GAS = !!(window.google && google.script && google.script.run);
+var MODE = IS_GAS ? 'gas' : (CONFIG.API_URL ? 'web' : (window.__MOCK_API__ ? 'mock' : 'none'));
+var SERIAL_RE = /^[A-Z0-9\-_.\/+]{1,40}$/;
+var STRONG_FORMATS = ['code_128', 'qr_code', 'data_matrix', 'ean_13', 'ean_8', 'upc_a'];
+
+/* ---------- アイコン ---------- */
+function svg(d) { return '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; }
+var I = {
+  back: svg('<path d="M15 5l-7 7 7 7"/>'),
+  home: svg('<path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/>'),
+  gear: svg('<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/>'),
+  camera: svg('<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.6"/>'),
+  barcode: svg('<path d="M4 5v14M7 5v14M10.5 5v14M14 5v14M16.5 5v14M20 5v14"/>'),
+  keyboard: svg('<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/>'),
+  list: svg('<path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/>'),
+  clipboard: svg('<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9zM9 13l2 2 4-4"/>'),
+  check: svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>'),
+  alert: svg('<path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v4.5M12 17.5h.01"/>'),
+  move: svg('<path d="M4 8h15l-4-4M20 16H5l4 4"/>'),
+  edit: svg('<path d="M4 20h4L19.5 8.5l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>'),
+  undo: svg('<path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 010 11H11"/>'),
+  image: svg('<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/>'),
+  search: svg('<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>'),
+  pin: svg('<path d="M12 21s7-6.2 7-11.5a7 7 0 10-14 0C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.4"/>'),
+  plus: svg('<path d="M12 5v14M5 12h14"/>'),
+  x: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
+  refresh: svg('<path d="M20 11a8 8 0 10-2.4 5.8"/><path d="M20 4.5V11h-6.5"/>'),
+  repeat: svg('<path d="M4 12a8 8 0 0113.7-5.6L20 9"/><path d="M20 4v5h-5"/><path d="M20 12a8 8 0 01-13.7 5.6L4 15"/><path d="M4 20v-5h5"/>'),
+  question: svg('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 114 2c-.9.6-1.5 1.1-1.5 2.2M12 17h.01"/>'),
+  chevron: svg('<path d="M9 5l7 7-7 7"/>')
+};
+
+/* ---------- 小さな道具 ---------- */
+function $(s, r) { return (r || document).querySelector(s); }
+function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
+function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function newId() {
+  try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) { /* 下へ */ }
+  return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+function nfkc(v) { var s = String(v == null ? '' : v); try { s = s.normalize('NFKC'); } catch (e) { /* 古いブラウザ */ } return s; }
+function normSerial(v) { return nfkc(v).replace(/[\x00-\x1F\x7F\s]/g, '').toUpperCase(); }
+function normKey(v) { return nfkc(v).replace(/\s+/g, '').toUpperCase(); }
+function uniq(a) { var seen = {}; return a.filter(function (x) { if (seen[x]) return false; seen[x] = 1; return true; }); }
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function pad(n) { return (n < 10 ? '0' : '') + n; }
+function fmtDate(ms, dateOnly) {
+  if (!ms) return '';
+  var d = new Date(ms);
+  return d.getFullYear() + '/' + pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + (dateOnly ? '' : ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()));
+}
+function ago(ms) {
+  if (!ms) return '';
+  var m = Math.floor((Date.now() - ms) / 60000);
+  if (m < 1) return 'たった今';
+  if (m < 60) return m + '分前';
+  var h = Math.floor(m / 60);
+  if (h < 24) return h + '時間前';
+  var days = Math.floor(h / 24);
+  if (days < 30) return days + '日前';
+  return fmtDate(ms, true);
+}
+
+var store = {
+  get: function (k, d) { try { var v = localStorage.getItem('itv.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set: function (k, v) { try { localStorage.setItem('itv.' + k, JSON.stringify(v)); } catch (e) { /* 保存できない環境 */ } },
+  del: function (k) { try { localStorage.removeItem('itv.' + k); } catch (e) { /* 何もしない */ } }
+};
+
+/* ---------- 状態 ---------- */
+var st = {
+  token: store.get('token', ''),
+  user: store.get('user', ''),
+  deviceId: store.get('deviceId', ''),
+  scanMode: store.get('scanMode', 'auto'),
+  recentStores: store.get('recentStores', []),
+  ops: store.get('ops', []),
+  inv: store.get('inv', null),
+  boot: null,
+  devices: new Map(),
+  statusMap: new Map(),
+  stack: [],
+  cur: null,
+  form: null,
+  listFilter: null,
+  liveFailed: false,
+  lastBoot: 0,
+  deferredInstall: null
+};
+if (!st.deviceId) { st.deviceId = newId(); store.set('deviceId', st.deviceId); }
+
+function deviceLabel() {
+  var ua = navigator.userAgent || '';
+  var os = /iPhone/.test(ua) ? 'iPhone' : (/iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) ? 'iPad' :
+    /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac OS/.test(ua) ? 'Mac' : 'その他';
+  var br = /Line\//.test(ua) ? 'LINE' : /WorksMobile|LINEWORKS/i.test(ua) ? 'LINE WORKS' : /EdgA?\//.test(ua) ? 'Edge' :
+    /CriOS|Chrome\//.test(ua) ? 'Chrome' : /FxiOS|Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'ブラウザ';
+  return os + ' / ' + br;
+}
+
+/* =========================================================
+ * サーバーとの通信
+ * ========================================================= */
+function AppError(code, message, extra) { var e = new Error(message); e.code = code; e.extra = extra; return e; }
+
+function api(action, payload) {
+  var req = { action: action, payload: payload || {}, token: st.token, user: st.user, device: { id: st.deviceId, label: deviceLabel() }, v: APP_VERSION };
+  return new Promise(function (resolve, reject) {
+    function done(res) {
+      if (typeof res === 'string') { try { res = JSON.parse(res); } catch (e) { res = null; } }
+      if (!res || typeof res !== 'object') return reject(AppError('SERVER', 'サーバーから正しい応答がありませんでした。時間をおいて試してください。'));
+      if (res.ok) return resolve(res.data);
+      reject(AppError(res.code || 'SERVER', res.message || 'エラーが発生しました。', res.extra));
+    }
+    function fail(err) {
+      reject(AppError('NETWORK', '電波の良い場所で、もう一度お試しください。', String(err && err.message || err)));
+    }
+    try {
+      if (MODE === 'gas') google.script.run.withSuccessHandler(done).withFailureHandler(fail).api(req);
+      else if (MODE === 'web') fetch(CONFIG.API_URL, { method: 'POST', body: JSON.stringify(req), redirect: 'follow' }).then(function (r) { return r.text(); }).then(done, fail);
+      else if (MODE === 'mock') Promise.resolve(window.__MOCK_API__(req)).then(done, fail);
+      else reject(AppError('CONFIG', '接続先が設定されていません（CONFIG.API_URL）。'));
+    } catch (e) { fail(e); }
+  });
+}
+
+var busyTimer = null;
+function showBusy(text) {
+  $('#busyText').textContent = text || '通信中…';
+  $('#busy').hidden = false;
+  clearTimeout(busyTimer);
+  busyTimer = setTimeout(function () { $('#busyText').textContent = (text || '通信中…') + '\n時間がかかっています。そのままお待ちください。'; }, 9000);
+}
+function hideBusy() { clearTimeout(busyTimer); $('#busy').hidden = true; }
+
+async function run(fn, busyText) {
+  showBusy(busyText);
+  try { return await fn(); }
+  catch (e) { handleError(e); throw e; }
+  finally { hideBusy(); }
+}
+
+var ERROR_TITLES = {
+  NETWORK: '通信できませんでした', BAD_PASS: '合言葉が違います', LOCKED: 'しばらくお待ちください', BUSY: '混み合っています',
+  DUPLICATE_ROWS: '台帳に同じ番号が複数あります', UNDO_EXPIRED: '取り消せません', UNDO_NOT_FOUND: '取り消せません',
+  BAD_LOCATION: '設置場所を確認してください', BAD_STATUS: '状態を確認してください', BAD_SERIAL: '番号を確認してください',
+  SETUP: '初期設定が必要です', BAD_PHOTO: '写真を送れませんでした', CONFIG: '設定が必要です'
+};
+function handleError(e) {
+  if (e.code === 'AUTH') {
+    st.token = ''; store.del('token');
+    go('login', { message: e.message }, { root: true });
+    return;
+  }
+  if (e.code === 'NO_NAME') { go('login', { message: e.message }, { root: true }); return; }
+  alertModal(ERROR_TITLES[e.code] || 'エラー', e.message);
+}
+
+async function loadBoot() {
+  var b = await api('bootstrap');
+  st.boot = b;
+  st.devices = new Map(b.devices.map(function (d) { return [d.s, d]; }));
+  st.statusMap = new Map(b.statuses.map(function (s) { return [s.name, s]; }));
+  st.lastBoot = Date.now();
+  if (document.title !== b.settings.appName) document.title = b.settings.appName;
+  return b;
+}
+function refreshBootQuietly() {
+  if (!st.token || Date.now() - st.lastBoot < 60000) return;
+  loadBoot().then(function () { if (topName() === 'home') render(); }, function () { /* 無視 */ });
+}
+
+/* ---------- マスタの道具 ---------- */
+function appName() { return (st.boot && st.boot.settings.appName) || document.title || 'impactTV 端末管理'; }
+function statusInfo(name) { return st.statusMap.get(name) || { name: name || '（未設定）', kind: '', color: '#64748b', desc: '' }; }
+function kindOf(name) { return statusInfo(name).kind; }
+function statusByKind(kind) { var s = st.boot.statuses.filter(function (x) { return x.kind === kind; })[0]; return s ? s.name : null; }
+function normalStatus() { return statusByKind('正常') || st.boot.statuses[0].name; }
+function badge(name) { var s = statusInfo(name); return '<span class="badge" style="--c:' + esc(s.color) + '"><i></i>' + esc(s.name) + '</span>'; }
+function pill(name) { var s = statusInfo(name); return '<span class="pill" style="--c:' + esc(s.color) + '">' + esc(s.name) + '</span>'; }
+function staleMs() { return st.boot.settings.staleDays * 86400000; }
+function isStale(c) { return kindOf(c.st) !== '終了' && (!c.ck || Date.now() - c.ck > staleMs()); }
+function inferModel(serial) {
+  var best = null;
+  (st.boot.models || []).forEach(function (m) { if (serial.indexOf(m.prefix) === 0 && (!best || m.prefix.length > best.prefix.length)) best = m; });
+  return best ? best.name : '';
+}
+function patternOk(serial) {
+  var p = st.boot.settings.serialPattern;
+  if (!p) return true;
+  try { return new RegExp(p).test(serial); } catch (e) { return true; }
+}
+function fromCompact(c) {
+  return { serial: c.s, location: c.l, spot: c.p, status: c.st, symptom: c.sy, model: c.m, contract: c.c, memo: c.n,
+    checkedAt: c.ck, checkedBy: c.cb, updatedAt: c.up, updatedBy: c.ub, rev: c.r, photos: [] };
+}
+function cacheDevice(d) {
+  st.devices.set(d.serial, { s: d.serial, l: d.location, p: d.spot, st: d.status, sy: d.symptom, m: d.model, c: d.contract,
+    n: d.memo, ck: d.checkedAt, cb: d.checkedBy, up: d.updatedAt, ub: d.updatedBy, r: d.rev, ph: d.photos && d.photos.length ? 1 : 0 });
+}
+function rememberStore(name) {
+  if (!name) return;
+  st.recentStores = uniq([name].concat(st.recentStores)).slice(0, 6);
+  store.set('recentStores', st.recentStores);
+}
+function storeNames() { return st.boot.stores.map(function (s) { return s.name; }); }
+
+/* =========================================================
+ * 画面遷移
+ * ========================================================= */
+var screens = {};
+var acts = {};
+var modalActs = {};
+var histDepth = 0;
+
+function topName() { var t = st.stack[st.stack.length - 1]; return t ? t.name : ''; }
+function topParams() { var t = st.stack[st.stack.length - 1]; return (t && t.params) || {}; }
+
+function go(name, params, opts) {
+  opts = opts || {};
+  if (opts.root) st.stack = [{ name: name, params: params || {} }];
+  else if (opts.replace && st.stack.length) st.stack[st.stack.length - 1] = { name: name, params: params || {} };
+  else { st.stack.push({ name: name, params: params || {} }); histPush(name); }
+  render();
+}
+function back() {
+  if (st.stack.length > 1) { st.stack.pop(); render(); }
+  else if (topName() !== 'home' && st.boot) go('home', null, { root: true });
+}
+function render() {
+  var t = st.stack[st.stack.length - 1];
+  closeModal();
+  acts = {};
+  var noNav = t.name === 'login' || t.name === 'error';
+  $('#btnBack').hidden = st.stack.length <= 1 || noNav;
+  $('#btnSettings').hidden = noNav || t.name === 'settings';
+  $('#demoPill').hidden = MODE !== 'mock';
+  var tabOn = !noNav && ['home', 'search', 'list', 'settings'].indexOf(t.name) >= 0;
+  document.body.classList.toggle('tabbar-on', tabOn);
+  $('#tabbar').hidden = !tabOn;
+  var curTab = { home: 'home', list: 'list', settings: 'settings' }[t.name] || '';
+  $$('#tabbar .tab').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-tab') === curTab); });
+  screens[t.name](t.params || {});
+  window.scrollTo(0, 0);
+}
+function setView(html, title) {
+  var v = $('#view');
+  v.innerHTML = html;
+  $('#barTitle').textContent = title || appName();
+  v.classList.remove('view-enter');
+  void v.offsetWidth;
+  v.classList.add('view-enter');
+}
+function histPush(name) {
+  try {
+    histDepth++;
+    if (MODE === 'gas' && google.script.history) google.script.history.push({ d: histDepth }, {}, name);
+    else if (window.history && history.pushState) history.pushState({ d: histDepth }, '', '#' + name);
+  } catch (e) { /* 何もしない */ }
+}
+function onHistoryBack() {
+  if (!$('#scanner').hidden) { Live.close(); return; }
+  if (!$('#modal').hidden) { closeModal(); return; }
+  if (st.stack.length > 1) { st.stack.pop(); render(); }
+}
+
+document.addEventListener('click', function (e) {
+  var el = e.target.closest('[data-act]');
+  if (!el) return;
+  var name = el.getAttribute('data-act');
+  var fn = (!$('#modal').hidden && modalActs[name]) || acts[name] || globalActs[name];
+  if (!fn) return;
+  if (el.tagName !== 'LABEL' && el.tagName !== 'SUMMARY') e.preventDefault();
+  fn(el, e);
+});
+
+var globalActs = {
+  openSerial: function (el) { openSerial(el.getAttribute('data-serial')); },
+  undo: function (el) { doUndo(el.getAttribute('data-op')); },
+  goHome: function () { go('home', null, { root: true }); },
+  goSearch: function () { go('search'); },
+  goList: function () { st.listFilter = null; go('list'); },
+  goInv: function () { go('invPick'); },
+  resumeInv: function () { go('inv'); },
+  scan: function () { startScan(); },
+  refresh: function () { run(loadBoot, '最新の情報を読み込み中…').then(function () { render(); toast('最新の情報にしました'); }, function () {}); },
+  listStatus: function (el) { st.listFilter = null; go('list', { status: el.getAttribute('data-status') }); },
+  listStale: function () { st.listFilter = null; go('list', { stale: true }); }
+};
+
+/* =========================================================
+ * トースト・モーダル
+ * ========================================================= */
+var toastTimer = null;
+function toast(text, action, ms) {
+  var t = $('#toast');
+  t.innerHTML = '<span>' + esc(text) + '</span>' + (action ? '<button type="button" id="toastAct">' + esc(action.label) + '</button>' : '');
+  t.hidden = false;
+  if (action) $('#toastAct').onclick = function () { t.hidden = true; action.fn(); };
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { t.hidden = true; }, ms || (action ? 8000 : 3000));
+}
+
+var modalResolve = null;
+function openModal(html, actsMap, opts) {
+  opts = opts || {};
+  var m = $('#modal');
+  m.innerHTML = '<div class="sheet' + (opts.tall ? ' tall' : '') + '" role="dialog" aria-modal="true">' + html + '</div>';
+  m.hidden = false;
+  modalActs = actsMap || {};
+  m.onclick = function (e) { if (e.target === m && !opts.sticky) closeModal(); };
+  var f = $('[data-autofocus]', m);
+  if (f) setTimeout(function () { f.focus(); }, 60);
+}
+function closeModal(value) {
+  var m = $('#modal');
+  if (m.hidden) return;
+  m.hidden = true;
+  m.innerHTML = '';
+  modalActs = {};
+  if (modalResolve) { var r = modalResolve; modalResolve = null; r(value); }
+}
+function alertModal(title, text) {
+  openModal('<h3>' + esc(title) + '</h3><p class="body">' + esc(text) + '</p><button class="btn primary" data-act="ok">OK</button>', { ok: function () { closeModal(); } });
+}
+function confirmModal(title, text, okLabel, danger) {
+  return new Promise(function (resolve) {
+    openModal('<h3>' + esc(title) + '</h3><p class="body">' + esc(text) + '</p><div class="stack">' +
+      '<button class="btn ' + (danger ? 'danger' : 'primary') + '" data-act="yes">' + esc(okLabel || 'OK') + '</button>' +
+      '<button class="btn ghost" data-act="no">やめる</button></div>',
+      { yes: function () { closeModal(true); }, no: function () { closeModal(false); } });
+    modalResolve = resolve;
+  });
+}
+
+/* 設置場所の選択 */
+function pickStore(title, current) {
+  return new Promise(function (resolve) {
+    var names = storeNames();
+    var recent = st.recentStores.filter(function (n) { return names.indexOf(n) >= 0; });
+    function itemHtml(n) {
+      return '<button class="btn left" data-act="pick" data-name="' + esc(n) + '">' + I.pin + '<span class="grow">' + esc(n) + '</span>' +
+        (n === current ? '<span class="badge"><i style="background:var(--ok)"></i>いま</span>' : '') + '</button>';
+    }
+    function listHtml(q) {
+      var k = normKey(q);
+      var hit = names.filter(function (n) { return !k || normKey(n).indexOf(k) >= 0; });
+      var html = '';
+      if (!k && recent.length) html += '<p class="label">最近使った場所</p><div class="stack">' + recent.map(itemHtml).join('') + '</div><p class="label" style="margin-top:14px">すべての場所</p>';
+      html += hit.length ? '<div class="stack">' + hit.map(itemHtml).join('') + '</div>' : '<p class="empty">見つかりません</p>';
+      return html;
+    }
+    openModal('<h3>' + esc(title) + '</h3>' +
+      '<input type="search" id="storeQ" placeholder="店舗名で絞り込み" autocomplete="off">' +
+      '<div class="scroll" id="storeList">' + listHtml('') + '</div>' +
+      '<button class="btn ghost" data-act="cancel" style="margin-top:10px">やめる</button>',
+      {
+        pick: function (el) { var n = el.getAttribute('data-name'); rememberStore(n); closeModal(n); },
+        cancel: function () { closeModal(null); }
+      }, { tall: true });
+    modalResolve = resolve;
+    $('#storeQ').addEventListener('input', function (e) { $('#storeList').innerHTML = listHtml(e.target.value); });
+  });
+}
+
+/* =========================================================
+ * バーコードの読み取り
+ * ========================================================= */
+var scriptPromises = {};
+function loadScript(url) {
+  if (!scriptPromises[url]) {
+    scriptPromises[url] = new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      var timer = setTimeout(function () { reject(new Error('読み込みがタイムアウトしました')); }, 25000);
+      s.src = url;
+      s.async = true;
+      s.crossOrigin = 'anonymous';
+      s.onload = function () { clearTimeout(timer); resolve(); };
+      s.onerror = function () { clearTimeout(timer); delete scriptPromises[url]; reject(new Error('読み取り機能を読み込めませんでした')); };
+      document.head.appendChild(s);
+    });
+  }
+  return scriptPromises[url];
+}
+
+async function loadBitmap(file) {
+  if (window.createImageBitmap) {
+    try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (e) { /* 下へ */ }
+    try { return await createImageBitmap(file); } catch (e) { /* 下へ */ }
+  }
+  return await new Promise(function (resolve, reject) {
+    var url = URL.createObjectURL(file);
+    var im = new Image();
+    im.onload = function () { resolve(im); setTimeout(function () { URL.revokeObjectURL(url); }, 1000); };
+    im.onerror = function () { URL.revokeObjectURL(url); reject(new Error('写真を開けませんでした')); };
+    im.src = url;
+  });
+}
+function drawScaled(img, max) {
+  var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  var sc = Math.min(1, max / Math.max(w, h));
+  var c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(w * sc));
+  c.height = Math.max(1, Math.round(h * sc));
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return c;
+}
+async function resizeImage(file, max, quality) {
+  var img = await loadBitmap(file);
+  return drawScaled(img, max).toDataURL('image/jpeg', quality);
+}
+
+var Decoder = {
+  engine: '', native: null, poly: null, loading: null, frameCanvas: null,
+  formats: function () { return (st.boot && st.boot.settings.formats) || ['code_128']; },
+  ready: function () {
+    if (!this.loading) {
+      var self = this;
+      this.loading = this.init().catch(function (e) { self.loading = null; throw e; });
+    }
+    return this.loading;
+  },
+  init: async function () {
+    var want = this.formats();
+    if (!CONFIG.FORCE_POLYFILL && 'BarcodeDetector' in window) {
+      try {
+        var sup = await window.BarcodeDetector.getSupportedFormats();
+        var f = want.filter(function (x) { return sup.indexOf(x) >= 0; });
+        if (f.indexOf('code_128') >= 0) { this.native = new window.BarcodeDetector({ formats: f }); this.engine = '端末内蔵'; }
+      } catch (e) { this.native = null; }
+    }
+    try {
+      await loadScript(CONFIG.SCANNER_LIB_URL);
+      var A = window.BarcodeDetectionAPI;
+      if (CONFIG.WASM_URL) {
+        A.prepareZXingModule({ overrides: { locateFile: function (p, prefix) { return /\.wasm$/.test(p) ? CONFIG.WASM_URL : prefix + p; } } });
+      }
+      var sup2 = await A.BarcodeDetector.getSupportedFormats();
+      var poly = new A.BarcodeDetector({ formats: want.filter(function (x) { return sup2.indexOf(x) >= 0; }) });
+      var tiny = document.createElement('canvas');
+      tiny.width = tiny.height = 8;
+      await poly.detect(tiny);
+      this.poly = poly;
+      if (!this.engine) this.engine = 'ZXing(wasm)';
+    } catch (e) {
+      this.poly = null;
+    }
+    if (!this.native && !this.poly) {
+      await loadScript(CONFIG.ZXING_JS_URL);
+      this.engine = 'ZXing(js)';
+    }
+    return true;
+  },
+  detectJs: function (canvas) {
+    var Z = window.ZXing;
+    if (!Z) return [];
+    var map = { code_128: 'CODE_128', code_39: 'CODE_39', code_93: 'CODE_93', ean_13: 'EAN_13', ean_8: 'EAN_8', qr_code: 'QR_CODE', itf: 'ITF', codabar: 'CODABAR', data_matrix: 'DATA_MATRIX' };
+    var formats = this.formats().map(function (f) { return Z.BarcodeFormat[map[f]]; }).filter(function (x) { return x != null; });
+    var hints = new Map();
+    hints.set(Z.DecodeHintType.TRY_HARDER, true);
+    hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, formats);
+    var reader = new Z.MultiFormatReader();
+    var sources = [canvas, rotate90(canvas)];
+    for (var i = 0; i < sources.length; i++) {
+      try {
+        var bmp = new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(sources[i])));
+        var r = reader.decode(bmp, hints);
+        var fmt = Object.keys(map).filter(function (k) { return Z.BarcodeFormat[map[k]] === r.getBarcodeFormat(); })[0] || 'unknown';
+        return [{ rawValue: r.getText(), format: fmt }];
+      } catch (e) { /* 見つからない */ }
+    }
+    return [];
+  },
+  detect: async function (source) {
+    var out = [];
+    if (this.native) { try { out = await this.native.detect(source); } catch (e) { out = []; } }
+    if (!out.length && this.poly) { try { out = await this.poly.detect(source); } catch (e) { out = []; } }
+    if (!out.length && !this.native && !this.poly && source.getContext) out = this.detectJs(source);
+    return out;
+  },
+  fromFile: async function (file) {
+    await this.ready();
+    var img = await loadBitmap(file);
+    var longSide = Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height);
+    var tried = {};
+    var sizes = [1600, 2600];
+    for (var i = 0; i < sizes.length; i++) {
+      var size = Math.min(sizes[i], longSide);
+      if (tried[size]) continue;
+      tried[size] = 1;
+      var found = await this.detect(drawScaled(img, size));
+      if (found.length) return found;
+    }
+    if (!window.ZXing) { try { await loadScript(CONFIG.ZXING_JS_URL); } catch (e) { return []; } }
+    return this.detectJs(drawScaled(img, 1600));
+  },
+  frame: function (video) {
+    if (this.native) return video;
+    var vw = video.videoWidth, vh = video.videoHeight;
+    var sc = Math.min(1, 1024 / Math.max(vw, vh));
+    var c = this.frameCanvas || (this.frameCanvas = document.createElement('canvas'));
+    c.width = Math.round(vw * sc);
+    c.height = Math.round(vh * sc);
+    c.getContext('2d').drawImage(video, 0, 0, c.width, c.height);
+    return c;
+  }
+};
+function rotate90(canvas) {
+  var c = document.createElement('canvas');
+  c.width = canvas.height;
+  c.height = canvas.width;
+  var g = c.getContext('2d');
+  g.translate(c.width, 0);
+  g.rotate(Math.PI / 2);
+  g.drawImage(canvas, 0, 0);
+  return c;
+}
+
+/* 音と振動 */
+var audioCtx = null;
+function unlockAudio() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch (e) { audioCtx = null; }
+}
+document.addEventListener('pointerdown', unlockAudio, { passive: true });
+function feedback(type) {
+  try {
+    if (audioCtx) {
+      var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.frequency.value = type === 'ok' ? 1175 : (type === 'dup' ? 330 : 587);
+      g.gain.value = 0.07;
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start();
+      o.stop(audioCtx.currentTime + (type === 'ok' ? 0.09 : 0.22));
+    }
+  } catch (e) { /* 何もしない */ }
+  try { if (navigator.vibrate) navigator.vibrate(type === 'ok' ? 60 : [90, 60, 90]); } catch (e) { /* 何もしない */ }
+}
+
+function liveAllowed() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.isSecureContext) return false;
+  var pp = document.permissionsPolicy || document.featurePolicy;
+  if (pp && typeof pp.allowsFeature === 'function') { try { return pp.allowsFeature('camera'); } catch (e) { /* 下へ */ } }
+  return MODE !== 'gas';
+}
+function scanMode() {
+  if (st.scanMode === 'photo') return 'photo';
+  if (st.liveFailed) return 'photo';
+  return liveAllowed() ? 'live' : 'photo';
+}
+function scanButtonHtml(label, sub) {
+  var inner = I.camera + '<span>' + esc(label) + '</span>' + (sub ? '<small>' + esc(sub) + '</small>' : '');
+  if (scanMode() === 'live') return '<button class="btn primary hero scan" type="button" data-act="scan">' + inner + '</button>';
+  return '<label class="btn primary hero scan" for="camInput" role="button" tabindex="0">' + inner + '</label>';
+}
+function startScan() {
+  if (scanMode() === 'live') Live.open(topName() === 'inv' ? 'inv' : 'single');
+  else $('#camInput').click();
+}
+
+async function onPhotoForScan(file) {
+  var purpose = topName() === 'inv' ? 'inv' : 'single';
+  showBusy('バーコードを探しています…');
+  var codes = [];
+  try {
+    codes = await Decoder.fromFile(file);
+  } catch (e) {
+    hideBusy();
+    scanFailed(e.message);
+    return;
+  }
+  hideBusy();
+  handleCodes(codes, purpose);
+}
+
+function handleCodes(codes, purpose) {
+  var values = uniq(codes.map(function (c) { return normSerial(c.rawValue); }).filter(Boolean));
+  if (!values.length) { scanFailed(); return; }
+  if (purpose === 'inv') {
+    values.forEach(function (v) { invAdd(v); });
+    if (values.length > 1) toast(values.length + '台を読み取りました');
+    return;
+  }
+  if (values.length === 1) { feedback('ok'); openSerial(values[0]); return; }
+  var known = values.filter(function (v) { return st.devices.has(v); });
+  if (known.length === 1) { feedback('ok'); openSerial(known[0]); return; }
+  openModal('<h3>複数のバーコードが写っています</h3><p class="body">開く番号を選んでください。</p><div class="stack">' +
+    values.map(function (v) {
+      var d = st.devices.get(v);
+      return '<button class="btn left" data-act="choose" data-serial="' + esc(v) + '"><span class="grow"><span class="mono">' + esc(v) + '</span><br><small>' +
+        (d ? esc(d.l) : '台帳にありません') + '</small></span>' + (d ? badge(d.st) : '') + '</button>';
+    }).join('') + '<button class="btn ghost" data-act="close">やめる</button></div>',
+    { choose: function (el) { closeModal(); openSerial(el.getAttribute('data-serial')); }, close: function () { closeModal(); } });
+}
+
+function scanFailed(reason) {
+  feedback('bad');
+  openModal('<h3>バーコードが読み取れませんでした</h3>' +
+    (reason ? '<p class="note warn">' + esc(reason) + '</p>' : '') +
+    '<p class="body">・黄色いシール全体が写るように、近づいて撮影してください\n・ピントが合ってから撮影してください（ぶれに注意）\n・明るい場所で、光の反射が入らない角度で\n・縦向き・横向きはどちらでも読み取れます</p>' +
+    '<div class="stack"><label class="btn primary" for="camInput">' + I.camera + 'もう一度撮影する</label>' +
+    '<button class="btn" data-act="manual">' + I.keyboard + '番号を入力する</button>' +
+    '<button class="btn ghost" data-act="close">閉じる</button></div>',
+    {
+      manual: function () { closeModal(); manualInput(); },
+      close: function () { closeModal(); }
+    });
+}
+
+function manualInput() {
+  if (topName() === 'inv') { invManual(); return; }
+  go('search');
+}
+
+function openSerial(raw) {
+  var serial = normSerial(raw);
+  if (!serial) return;
+  if (!SERIAL_RE.test(serial)) {
+    alertModal('シリアル番号ではないようです', '読み取った内容：' + serial.slice(0, 80) + '\n\n黄色いシールのバーコードを読み取ってください。');
+    return;
+  }
+  if (topName() === 'device' && topParams().serial === serial) { render(); return; }
+  go('device', { serial: serial });
+}
+
+/* かざして読み取る（ライブ） */
+var Live = {
+  stream: null, running: false, purpose: 'single', pending: '', cool: {}, count: 0, torchOn: false,
+  open: async function (purpose) {
+    this.purpose = purpose;
+    this.pending = '';
+    this.cool = {};
+    this.count = 0;
+    $('#scanTitle').textContent = purpose === 'inv' ? '棚卸：' + (st.inv ? st.inv.location : '') : 'バーコードを読み取る';
+    $('#scanHint').textContent = purpose === 'inv' ? '1台ずつ、黄色いシールを枠に入れてください（縦でも横でもOK）' : '黄色いシールを枠に入れてください（縦でも横でもOK）';
+    $('#scanDone').hidden = purpose !== 'inv';
+    $('#scanLast').hidden = true;
+    $('#scanTorch').hidden = true;
+    $('#scanner').hidden = false;
+    histPush('scan');
+    try {
+      await Decoder.ready();
+      this.stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+      if ($('#scanner').hidden) { this.stop(); return; }
+      var v = $('#video');
+      v.srcObject = this.stream;
+      await v.play();
+      var track = this.stream.getVideoTracks()[0];
+      var caps = track && track.getCapabilities ? track.getCapabilities() : {};
+      $('#scanTorch').hidden = !caps.torch;
+      this.running = true;
+      this.loop();
+    } catch (e) {
+      this.close();
+      st.liveFailed = true;
+      var denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
+      openModal('<h3>カメラを使えませんでした</h3><p class="body">' +
+        (denied ? 'カメラの使用が許可されていません。\n「撮影して読み取る」なら、そのまま使えます。' : esc(e && e.message ? e.message : 'カメラを起動できませんでした。')) +
+        '</p><div class="stack"><label class="btn primary" for="camInput">' + I.camera + '撮影して読み取る</label>' +
+        '<button class="btn" data-act="manual">' + I.keyboard + '番号を入力する</button>' +
+        '<button class="btn ghost" data-act="close">閉じる</button></div>',
+        { manual: function () { closeModal(); manualInput(); }, close: function () { closeModal(); if (topName() === 'home') render(); } });
+    }
+  },
+  loop: async function () {
+    var v = $('#video');
+    while (this.running) {
+      var t0 = performance.now();
+      try {
+        if (v.readyState >= 2 && v.videoWidth) {
+          var codes = await Decoder.detect(Decoder.frame(v));
+          if (codes.length && this.running) this.onCodes(codes);
+        }
+      } catch (e) { /* 次のフレームへ */ }
+      await sleep(Math.max(40, 150 - (performance.now() - t0)));
+    }
+  },
+  onCodes: function (codes) {
+    var now = Date.now();
+    for (var i = 0; i < codes.length; i++) {
+      var v = normSerial(codes[i].rawValue);
+      if (!v) continue;
+      if (STRONG_FORMATS.indexOf(codes[i].format) < 0 && this.pending !== v) { this.pending = v; continue; }
+      if (this.purpose === 'single') {
+        this.close();
+        feedback('ok');
+        openSerial(v);
+        return;
+      }
+      if (now - (this.cool[v] || 0) < 2500) continue;
+      this.cool[v] = now;
+      var lastBox = $('#scanLast');
+      if (st.inv && st.inv.items.some(function (it) { return it.s === v; })) {
+        lastBox.hidden = false;
+        lastBox.className = 'scan-last';
+        lastBox.textContent = v + '：読み取り済み';
+        continue;
+      }
+      var res = invAdd(v, true);
+      var frame = $('#scanFrame');
+      frame.classList.add('hit');
+      setTimeout(function () { frame.classList.remove('hit'); }, 350);
+      var last = $('#scanLast');
+      last.hidden = false;
+      last.className = 'scan-last ' + (res.kind === 'ok' ? 'ok' : 'warn');
+      last.textContent = (res.kind === 'ok' ? '✓ ' : '') + res.text + '（合計' + (st.inv ? st.inv.items.length : 0) + '台）';
+    }
+  },
+  toggleTorch: async function () {
+    try {
+      var track = this.stream.getVideoTracks()[0];
+      this.torchOn = !this.torchOn;
+      await track.applyConstraints({ advanced: [{ torch: this.torchOn }] });
+    } catch (e) { toast('ライトを切り替えられませんでした'); }
+  },
+  stop: function () {
+    this.running = false;
+    if (this.stream) { this.stream.getTracks().forEach(function (t) { t.stop(); }); this.stream = null; }
+    var v = $('#video');
+    try { v.pause(); v.srcObject = null; } catch (e) { /* 何もしない */ }
+  },
+  close: function () {
+    this.stop();
+    $('#scanner').hidden = true;
+    if (topName() === 'inv') render();
+  }
+};
+$('#scanClose').addEventListener('click', function () { Live.close(); });
+$('#scanDone').addEventListener('click', function () { Live.close(); });
+$('#scanTorch').addEventListener('click', function () { Live.toggleTorch(); });
+$('#scanManual').addEventListener('click', function () { Live.close(); manualInput(); });
+
+/* ファイル入力 */
+function onFile(id, fn) {
+  $(id).addEventListener('change', function (e) {
+    var file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!$('#scanner').hidden) Live.close();
+    closeModal();
+    fn(file);
+  });
+}
+onFile('#camInput', onPhotoForScan);
+onFile('#pickInput', onPhotoForScan);
+function onAttach(file) {
+  var F = st.form;
+  if (!F || F.photos.length >= 3) return;
+  showBusy('写真を準備しています…');
+  resizeImage(file, 1280, 0.8).then(function (data) {
+    hideBusy();
+    F.photos.push(data);
+    if (topName() === 'form') paintForm();
+  }, function (e) { hideBusy(); alertModal('写真を追加できませんでした', e.message); });
+}
+onFile('#photoInput', onAttach);
+onFile('#photoPick', onAttach);
+
+/* label をボタンとして使っている箇所をキーボードでも押せるように */
+document.addEventListener('keydown', function (e) {
+  var t = e.target;
+  if ((e.key === 'Enter' || e.key === ' ') && t && t.tagName === 'LABEL' && t.getAttribute('role') === 'button') { e.preventDefault(); t.click(); }
+});
+
+/* バーコードリーダー（キーボード入力型）：ホーム・棚卸画面で入力を受け付ける */
+var wedge = { buf: '', last: 0 };
+document.addEventListener('keydown', function (e) {
+  var tag = (e.target && e.target.tagName) || '';
+  if (/INPUT|TEXTAREA|SELECT/.test(tag) || !$('#modal').hidden) return;
+  if (['home', 'inv', 'device'].indexOf(topName()) < 0) return;
+  var now = Date.now();
+  if (now - wedge.last > 80) wedge.buf = '';
+  wedge.last = now;
+  if (e.key === 'Enter') {
+    if (wedge.buf.length >= 4) {
+      var v = wedge.buf;
+      wedge.buf = '';
+      if (topName() === 'inv') invAdd(v); else openSerial(v);
+    }
+    return;
+  }
+  if (e.key.length === 1) wedge.buf += e.key;
+});
+
+/* =========================================================
+ * 画面：ログイン
+ * ========================================================= */
+screens.login = function (p) {
+  var needPass = !st.token;
+  setView(
+    '<div class="card center" style="padding:24px 16px">' +
+      '<img src="icons/icon-192.png" alt="" width="72" height="72" style="border-radius:18px" onerror="this.style.display=\'none\'">' +
+      '<h1 style="font-size:22px;margin:12px 0 6px">' + esc(appName()) + '</h1>' +
+      '<p class="hint" style="margin:0">impactTVの黄色いシールを読み取って、<br>状態や設置場所を記録します。</p>' +
+      '<p class="hint" style="margin:8px 0 0;color:var(--sub);font-weight:600">スマホのブラウザで、そのまま使えます</p>' +
+    '</div>' +
+    (p.message ? '<div class="note warn">' + I.alert + '<div>' + esc(p.message) + '</div></div>' : '') +
+    (MODE === 'mock' ? '<div class="note warn">' + I.alert + '<div><b>デモモードです</b><br>合言葉は <b>kaino</b> です。記録は保存されず、再読み込みで元に戻ります。</div></div>' : '') +
+    '<form class="card" id="loginForm" autocomplete="off" novalidate>' +
+      (needPass ? '<label class="field"><span>合言葉</span><input id="inPass" type="password" autocapitalize="off" autocomplete="current-password" placeholder="本部から伝えられた合言葉"></label>' : '') +
+      '<label class="field"><span>お名前</span><input id="inName" type="text" maxlength="20" placeholder="例：山田" value="' + esc(st.user) + '" autocomplete="name"></label>' +
+      '<p class="hint">お名前は「誰が記録したか」を残すために使います。この端末に保存されます。</p>' +
+      '<button class="btn primary" type="submit">はじめる</button>' +
+    '</form>', 'ようこそ');
+  var form = $('#loginForm');
+  setTimeout(function () { var f = needPass ? $('#inPass') : $('#inName'); if (f && !f.value) f.focus(); }, 80);
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var name = $('#inName').value.trim();
+    if (needPass && !$('#inPass').value.trim()) { toast('合言葉を入力してください'); $('#inPass').focus(); return; }
+    if (!name) { toast('お名前を入力してください'); $('#inName').focus(); return; }
+    st.user = name;
+    store.set('user', name);
+    try {
+      if (needPass) await run(function () { return login($('#inPass').value); }, '合言葉を確認しています…');
+      await run(loadBoot, '読み込み中…');
+    } catch (err) { return; }
+    go('home', null, { root: true });
+    Decoder.ready().catch(function () {});
+  });
+};
+async function login(pass) {
+  var r = await api('login', { passcode: pass });
+  st.token = r.token;
+  store.set('token', r.token);
+}
+
+screens.error = function (p) {
+  setView('<div class="note danger">' + I.alert + '<div><b>' + esc(p.title || '読み込めませんでした') + '</b><br>' + esc(p.message || '') + '</div></div>' +
+    '<div class="stack"><button class="btn primary" data-act="retry">' + I.refresh + 'もう一度読み込む</button>' +
+    '<button class="btn" data-act="relogin">合言葉を入力し直す</button></div>', appName());
+  acts.retry = function () { start(); };
+  acts.relogin = function () { st.token = ''; store.del('token'); go('login', {}, { root: true }); };
+};
+
+/* =========================================================
+ * 画面：ホーム
+ * ========================================================= */
+screens.home = function () {
+  var b = st.boot;
+  var counts = {};
+  var stale = 0;
+  st.devices.forEach(function (d) { counts[d.st] = (counts[d.st] || 0) + 1; if (isStale(d)) stale++; });
+  var photo = scanMode() !== 'live';
+  var html = '<p class="hello">' + esc(st.user) + ' さん</p>';
+  if (MODE === 'mock') html += '<div class="note warn">' + I.alert + '<div><b>デモモード</b>：記録は保存されません。再読み込みすると初期状態に戻ります。</div></div>';
+  if (b.duplicates && b.duplicates.length) {
+    html += '<div class="note danger">' + I.alert + '<div><b>台帳に同じシリアルが複数行あります（' + b.duplicates.length + '件）</b><br>' +
+      '本部でメニュー「台帳のチェック」を実行してください。<br><span class="mono">' + esc(b.duplicates.slice(0, 3).join('、')) + '</span></div></div>';
+  }
+  if (st.inv) {
+    html += '<button class="note info" data-act="resumeInv">' + I.clipboard + '<div><b>棚卸の途中です</b><br>' + esc(st.inv.location) + '・' + st.inv.items.length + '台読み取り済み<br><u>続きから再開する</u></div></button>';
+  }
+  html += scanButtonHtml('バーコードを読み取る', photo ? 'カメラで黄色いシールを撮影' : 'カメラをシールにかざす');
+  html += '<p class="tip">' + (photo ? '黄色いシール全体を大きく撮影（縦向きでもOK）' : '枠の中にシールが入ると自動で読み取ります') + '</p>';
+  html += '<div class="row2"><button class="btn" data-act="goSearch">' + I.keyboard + '番号で探す</button>' +
+    '<label class="btn" for="pickInput">' + I.image + '写真から読む</label></div>';
+  html += '<div class="row2"><button class="btn" data-act="goInv">' + I.clipboard + '棚卸</button>' +
+    '<button class="btn" data-act="goList">' + I.list + '一覧を見る</button></div>';
+  html += '<h2 class="sec">いまの状況<small>全' + st.devices.size + '台</small></h2><div class="stats">';
+  b.statuses.forEach(function (s) {
+    var n = counts[s.name] || 0;
+    html += '<button class="stat' + (n ? '' : ' zero') + '" data-act="listStatus" data-status="' + esc(s.name) + '" style="--c:' + esc(s.color) + '"><i></i><span>' + esc(s.name) + '</span><b>' + n + '</b></button>';
+  });
+  html += '<button class="stat' + (stale ? '' : ' zero') + '" data-act="listStale" style="--c:#b45309"><i></i><span>未確認・<br>長期未確認</span><b>' + stale + '</b></button></div>';
+  html += recentOpsHtml();
+  html += '<p class="foot">v' + APP_VERSION + '・<button class="linklike" data-act="refresh">' + I.refresh + '最新の情報にする</button></p>';
+  setView(html, appName());
+};
+
+function canUndo(o) { return o.undoable && !o.undone && st.boot && (Date.now() - o.at) < st.boot.settings.undoMinutes * 60000; }
+function addOp(o) {
+  st.ops = [o].concat(st.ops.filter(function (x) { return x.opId !== o.opId; })).slice(0, 12);
+  store.set('ops', st.ops);
+}
+function recentOpsHtml() {
+  var ops = st.ops.slice(0, 5);
+  if (!ops.length) return '';
+  return '<h2 class="sec">この端末での最近の記録</h2><div class="card list">' + ops.map(function (o) {
+    var main = '<span class="li-top"><span class="mono">' + esc(o.title) + '</span></span><span class="li-sub">' + esc(o.op) + '・' + esc(ago(o.at)) + (o.undone ? '（取り消し済み）' : '') + '</span>';
+    return '<div class="li">' +
+      (o.serial ? '<button class="li-main" data-act="openSerial" data-serial="' + esc(o.serial) + '">' + main + '</button>' : '<div class="li-main">' + main + '</div>') +
+      (canUndo(o) ? '<button class="btn small" data-act="undo" data-op="' + esc(o.opId) + '">' + I.undo + '元に戻す</button>' : '') +
+      '</div>';
+  }).join('') + '</div>';
+}
+
+/* =========================================================
+ * 画面：番号で探す
+ * ========================================================= */
+screens.search = function () {
+  setView('<form class="card" id="searchForm" autocomplete="off">' +
+    '<label class="field"><span>シリアル番号（黄色シールの文字）</span>' +
+    '<input id="inSerial" class="big" type="text" autocapitalize="characters" autocorrect="off" spellcheck="false" enterkeyhint="search" placeholder="PAC07A0100832"></label>' +
+    '<button class="btn primary" type="submit">' + I.search + 'この番号を開く</button>' +
+    '<p class="hint" style="margin:10px 0 0">下4桁（例：0832）だけでも探せます。バーコードリーダー（USB・Bluetooth）でも入力できます。</p>' +
+    '</form><div id="suggest"></div>', '番号で探す');
+  var inp = $('#inSerial');
+  setTimeout(function () { inp.focus(); }, 80);
+  inp.addEventListener('input', function () { renderSuggest(inp.value); });
+  $('#searchForm').addEventListener('submit', function (e) { e.preventDefault(); submitSearch(inp.value); });
+};
+function matchSerials(q, limit) {
+  var n = normSerial(q);
+  if (!n) return [];
+  var out = [];
+  st.devices.forEach(function (d) { if (d.s.indexOf(n) >= 0) out.push(d); });
+  out.sort(function (a, b) {
+    var ea = a.s.slice(-n.length) === n ? 0 : 1, eb = b.s.slice(-n.length) === n ? 0 : 1;
+    return ea - eb || (a.s < b.s ? -1 : 1);
+  });
+  return out.slice(0, limit);
+}
+function submitSearch(q) {
+  var n = normSerial(q);
+  if (!n) { toast('番号を入力してください'); return; }
+  if (st.devices.has(n)) { openSerial(n); return; }
+  var m = matchSerials(n, 50);
+  if (m.length === 1) { openSerial(m[0].s); return; }
+  if (m.length > 1) { toast(m.length + '台が当てはまります。下から選んでください'); renderSuggest(q); return; }
+  openSerial(n);
+}
+function renderSuggest(q) {
+  var box = $('#suggest');
+  if (!box) return;
+  if (!normSerial(q)) { box.innerHTML = ''; return; }
+  var m = matchSerials(q, 30);
+  box.innerHTML = m.length ? '<div class="card list" style="padding:0">' + m.map(deviceRowHtml).join('') + '</div>' :
+    '<p class="empty">台帳に一致する端末はありません。<br>「この番号を開く」から新しく登録できます。</p>';
+}
+function deviceRowHtml(d) {
+  var stale = isStale(d);
+  return '<button class="li" data-act="openSerial" data-serial="' + esc(d.s) + '">' +
+    '<span class="li-top"><span class="mono">' + esc(d.s) + '</span>' + badge(d.st) + '</span>' +
+    '<span class="li-sub">' + esc(d.l || '（場所なし）') + (d.p ? '・' + esc(d.p) : '') + (d.m ? '・' + esc(d.m) : '') + '</span>' +
+    '<span class="li-sub' + (stale ? ' warn-text' : '') + '">' + (d.ck ? '確認：' + esc(ago(d.ck)) + (d.cb ? '（' + esc(d.cb) + '）' : '') : 'まだ読み取り確認されていません') + '</span>' +
+    '</button>';
+}
+
+/* =========================================================
+ * 画面：一覧
+ * ========================================================= */
+screens.list = function (p) {
+  var f = st.listFilter = st.listFilter || { q: '', status: p.status || '', loc: '', stale: !!p.stale, limit: 80 };
+  var counts = {};
+  var locs = {};
+  st.devices.forEach(function (d) { counts[d.st] = (counts[d.st] || 0) + 1; locs[d.l] = 1; });
+  var order = storeNames();
+  var locList = Object.keys(locs).sort(function (a, b) {
+    var ia = order.indexOf(a), ib = order.indexOf(b);
+    return (ia < 0 ? 9999 : ia) - (ib < 0 ? 9999 : ib) || (a < b ? -1 : 1);
+  });
+  var chips = '<button class="chip" data-act="fStatus" data-v="" aria-pressed="' + (!f.status && !f.stale) + '">すべて</button>' +
+    st.boot.statuses.map(function (s) {
+      return '<button class="chip status" style="--c:' + esc(s.color) + '" data-act="fStatus" data-v="' + esc(s.name) + '" aria-pressed="' + (f.status === s.name) + '"><i class="dot"></i>' + esc(s.name) + ' ' + (counts[s.name] || 0) + '</button>';
+    }).join('') +
+    '<button class="chip" data-act="fStale" aria-pressed="' + f.stale + '">未確認・長期未確認</button>';
+  setView('<div class="search-row"><input type="search" id="listQ" placeholder="番号・店舗名で絞り込み" value="' + esc(f.q) + '" autocomplete="off"></div>' +
+    '<div class="filters" style="margin-top:10px">' + chips + '</div>' +
+    '<select id="listLoc" aria-label="設置場所で絞り込み"><option value="">すべての場所</option>' +
+    locList.map(function (l) { return '<option value="' + esc(l) + '"' + (f.loc === l ? ' selected' : '') + '>' + esc(l || '（場所なし）') + '</option>'; }).join('') + '</select>' +
+    '<div id="listBody"></div>', '一覧');
+  acts.fStatus = function (el) { f.status = el.getAttribute('data-v'); f.stale = false; f.limit = 80; render(); };
+  acts.fStale = function () { f.stale = !f.stale; f.status = ''; f.limit = 80; render(); };
+  acts.more = function () { f.limit += 200; paintList(); };
+  $('#listQ').addEventListener('input', function (e) { f.q = e.target.value; f.limit = 80; paintList(); });
+  $('#listLoc').addEventListener('change', function (e) { f.loc = e.target.value; f.limit = 80; paintList(); });
+  paintList();
+};
+function paintList() {
+  var f = st.listFilter;
+  var qs = normSerial(f.q), qk = normKey(f.q);
+  var rows = [];
+  st.devices.forEach(function (d) {
+    if (f.status && d.st !== f.status) return;
+    if (f.stale && !isStale(d)) return;
+    if (f.loc && d.l !== f.loc) return;
+    if (qk && d.s.indexOf(qs) < 0 && normKey(d.l).indexOf(qk) < 0) return;
+    rows.push(d);
+  });
+  var order = storeNames();
+  rows.sort(function (a, b) {
+    var ia = order.indexOf(a.l), ib = order.indexOf(b.l);
+    return (ia < 0 ? 9999 : ia) - (ib < 0 ? 9999 : ib) || (a.l < b.l ? -1 : a.l > b.l ? 1 : 0) || (a.s < b.s ? -1 : 1);
+  });
+  var shown = rows.slice(0, f.limit);
+  $('#listBody').innerHTML = '<h2 class="sec">' + rows.length + '台</h2>' +
+    (shown.length ? '<div class="card list" style="padding:0">' + shown.map(deviceRowHtml).join('') + '</div>' : '<p class="empty">当てはまる端末はありません</p>') +
+    (rows.length > shown.length ? '<button class="btn" data-act="more">さらに表示（残り' + (rows.length - shown.length) + '台）</button>' : '');
+}
+
+/* =========================================================
+ * 画面：端末
+ * ========================================================= */
+screens.device = function (p) {
+  var serial = p.serial;
+  var cached = st.devices.get(serial);
+  st.cur = { serial: serial, device: cached ? fromCompact(cached) : null, history: null, loading: true, error: null };
+  paintDevice();
+  api('getDevice', { serial: serial }).then(function (r) {
+    if (topName() !== 'device' || topParams().serial !== serial) return;
+    st.cur = { serial: serial, device: r.device, history: r.history, loading: false, error: null };
+    if (r.device) cacheDevice(r.device); else st.devices.delete(serial);
+    paintDevice();
+  }, function (e) {
+    if (topName() !== 'device' || topParams().serial !== serial) return;
+    if (e.code === 'AUTH') { handleError(e); return; }
+    st.cur.loading = false;
+    st.cur.error = e;
+    paintDevice();
+  });
+};
+
+function paintDevice() {
+  var c = st.cur;
+  var d = c.device;
+  acts.report = function () { go('form', { serial: c.serial, type: 'report' }); };
+  acts.move = function () { go('form', { serial: c.serial, type: 'move' }); };
+  acts.change = function () { go('form', { serial: c.serial, type: 'status' }); };
+  acts.register = function () { go('form', { serial: c.serial, type: 'new' }); };
+  acts.check = function () { quickSave('check'); };
+  acts.revive = function () { quickSave('revive'); };
+  acts.reload = function () { render(); };
+  var html = '';
+  if (c.error && c.error.code === 'DUPLICATE_ROWS') {
+    setView('<div class="card"><div class="serial">' + esc(c.serial) + '</div></div><div class="note danger">' + I.alert + '<div><b>この端末は台帳に複数行あります</b><br>' + esc(c.error.message) + '</div></div>' +
+      '<p class="hint">重複を整理するまで、この端末の記録はできません。本部に連絡してください。</p>', '端末');
+    return;
+  }
+  if (!d && c.loading) {
+    setView('<div class="card"><div class="serial">' + esc(c.serial) + '</div><div class="loading"><span class="spinner sm"></span>台帳を確認しています…</div></div>', '端末');
+    return;
+  }
+  if (!d && c.error) {
+    setView('<div class="card"><div class="serial">' + esc(c.serial) + '</div></div><div class="note warn">' + I.alert + '<div>' + esc(c.error.message) + '</div></div>' +
+      '<button class="btn primary" data-act="reload">' + I.refresh + 'もう一度読み込む</button>', '端末');
+    return;
+  }
+  if (!d) {
+    var okFmt = patternOk(c.serial);
+    html += '<div class="card"><div class="serial">' + esc(c.serial) + '</div>' +
+      '<div class="note info" style="margin:0">' + I.question + '<div><b>台帳にない端末です</b><br>新しく登録すると、次から状態や場所を記録できます。</div></div></div>';
+    if (!okFmt) {
+      html += '<div class="note warn">' + I.alert + '<div><b>いつもの番号の形と違います</b><br>読み取りミスや、別のバーコード（箱・背面など）の可能性があります。黄色いシールの番号と見比べてください。</div></div>';
+    }
+    html += '<div class="stack"><button class="btn primary" data-act="register">' + I.plus + 'この端末を登録する</button>' +
+      scanButtonHtml('別のバーコードを読み取る').replace(' hero', '') + '</div>';
+    setView(html, '未登録の端末');
+    return;
+  }
+  var info = statusInfo(d.status);
+  var kind = info.kind;
+  var normal = normalStatus();
+  html += '<div class="card">' +
+    '<div class="serial">' + esc(d.serial) + '</div>' +
+    pill(d.status) +
+    '<div class="place">' + I.pin + '<span>' + esc(d.location || '（場所なし）') + (d.spot ? '<br><small style="font-weight:600;color:var(--muted)">' + esc(d.spot) + '</small>' : '') + '</span></div>' +
+    '<dl class="kv">' +
+    (d.symptom ? '<dt>症状</dt><dd>' + esc(d.symptom) + '</dd>' : '') +
+    (d.model ? '<dt>機種</dt><dd>' + esc(d.model) + '</dd>' : '') +
+    (d.contract && d.contract !== '契約中' ? '<dt>契約</dt><dd><b class="warn-text">' + esc(d.contract) + '</b></dd>' : '') +
+    (d.memo && d.memo !== d.symptom ? '<dt>メモ</dt><dd>' + esc(d.memo) + '</dd>' : '') +
+    '<dt>最終確認</dt><dd>' + (d.checkedAt ? esc(fmtDate(d.checkedAt)) + '（' + esc(d.checkedBy || '') + '）' : '<span class="warn-text">まだ読み取り確認されていません</span>') + '</dd>' +
+    (d.updatedAt ? '<dt>最終更新</dt><dd>' + esc(fmtDate(d.updatedAt)) + '（' + esc(d.updatedBy || '') + '）</dd>' : '') +
+    (d.photos && d.photos.length ? '<dt>写真</dt><dd>' + d.photos.map(function (u, i) { return '<a href="' + esc(u) + '" target="_blank" rel="noopener">写真' + (i + 1) + '</a>'; }).join('　') + '</dd>' : '') +
+    '</dl>' +
+    (c.loading ? '<div class="loading"><span class="spinner sm"></span>最新の情報を確認中…</div>' : '') +
+    '</div>';
+
+  var reviveLabel = { '故障': '直った（' + normal + 'に戻す）', '修理': '修理から戻った（' + normal + 'にする）', '移動': 'ここに届いた（' + normal + 'にする）', '不明': '見つかった（' + normal + 'に戻す）', '保管': '使い始める（' + normal + 'にする）' }[kind];
+  var banner = {
+    '故障': ['danger', '故障・不具合として報告されています'],
+    '修理': ['warn', '修理・交換に出している端末です'],
+    '移動': ['info', '移動中の端末です（行き先：' + (d.location || '未設定') + '）'],
+    '不明': ['warn', '所在不明になっている端末です'],
+    '終了': ['warn', '解約・返却済みの端末です。店舗にある場合は本部に連絡してください。']
+  }[kind];
+  if (banner) html += '<div class="note ' + banner[0] + '">' + I.alert + '<div><b>' + esc(banner[1]) + '</b></div></div>';
+  if (isStale({ st: d.status, ck: d.checkedAt }) && kind !== '終了' && d.checkedAt) {
+    html += '<div class="note warn">' + I.alert + '<div>' + st.boot.settings.staleDays + '日以上、読み取り確認されていません。</div></div>';
+  }
+
+  html += '<div class="stack">';
+  if (reviveLabel && d.status !== normal) html += '<button class="btn okb" data-act="revive">' + I.check + esc(reviveLabel) + '</button>';
+  if (kind === '正常' || kind === '') html += '<button class="btn okb" data-act="check">' + I.check + '異常なし（確認を記録）</button>';
+  if (kind !== '故障') html += '<button class="btn danger" data-act="report">' + I.alert + '故障・不具合を報告</button>';
+  else html += '<button class="btn" data-act="report">' + I.alert + '症状を追記する</button>';
+  html += '<button class="btn" data-act="move">' + I.move + '別の場所へ移動</button>';
+  html += '<button class="btn" data-act="change">' + I.edit + '状態・メモを変更</button>';
+  if (kind !== '正常' && kind !== '') html += '<button class="btn ghost" data-act="check">' + I.check + '確認だけ記録する</button>';
+  html += '</div>';
+
+  html += '<h2 class="sec">履歴</h2>';
+  if (!c.history) html += c.loading ? '<div class="loading"><span class="spinner sm"></span>読み込み中…</div>' : '';
+  else if (!c.history.length) html += '<p class="empty">まだ履歴はありません</p>';
+  else {
+    html += '<ul class="card hist">' + c.history.map(function (h) {
+      var change = [];
+      if (h.st0 && h.st1 && h.st0 !== h.st1) change.push(h.st0 + ' → ' + h.st1);
+      if (h.l0 && h.l1 && h.l0 !== h.l1) change.push(h.l0 + ' → ' + h.l1);
+      return '<li class="' + (h.undone ? 'undone' : '') + '"><div class="h-top"><span>' + esc(h.op) + '</span><span class="h-sub">' + esc(fmtDate(h.t)) + '</span></div>' +
+        '<div class="h-sub">' + esc(h.u) + (change.length ? '・' + esc(change.join('／')) : '') + '</div>' +
+        (h.sy && h.op.indexOf('故障') >= 0 ? '<div class="h-sub">症状：' + esc(h.sy) + '</div>' : '') +
+        (h.c ? '<div class="h-sub">' + esc(h.c) + '</div>' : '') +
+        (h.ph && h.ph.length ? '<div class="h-sub">' + h.ph.map(function (u, i) { return '<a href="' + esc(u) + '" target="_blank" rel="noopener">写真' + (i + 1) + '</a>'; }).join('　') + '</div>' : '') +
+        (h.undone ? '<div class="h-sub">' + esc(h.undone) + '</div>' : '') + '</li>';
+    }).join('') + '</ul>';
+  }
+  setView(html, '端末');
+}
+
+async function quickSave(type) {
+  var d = st.cur && st.cur.device;
+  if (!d) return;
+  var payload = { serial: d.serial, clientOpId: newId() };
+  if (type === 'check') payload.mode = 'check';
+  else { payload.mode = 'update'; payload.baseRev = d.rev; payload.status = normalStatus(); payload.kind = 'revive'; }
+  await submitSave(payload, null);
+}
+
+/* =========================================================
+ * 画面：入力フォーム（故障報告・移動・状態変更・新規登録）
+ * ========================================================= */
+screens.form = function (p) {
+  var d = st.cur && st.cur.serial === p.serial ? st.cur.device : null;
+  if (p.type !== 'new' && !d) { back(); return; }
+  if (!st.form || st.form.serial !== p.serial || st.form.type !== p.type || st.form.key !== p.key) st.form = initForm(p, d);
+  paintForm();
+};
+
+function initForm(p, d) {
+  var normal = normalStatus();
+  var f = {
+    key: p.key, type: p.type, serial: p.serial, opId: newId(), baseRev: d ? d.rev : 0,
+    status: d ? d.status : normal, location: d ? d.location : (st.recentStores[0] || ''), spot: d ? d.spot : '',
+    memo: d ? d.memo : '', model: d ? d.model : inferModel(p.serial), symptoms: [], comment: '', photos: [],
+    current: d
+  };
+  if (p.type === 'report') f.status = statusByKind('故障') || f.status;
+  if (p.type === 'move') { f.location = ''; f.moveState = (kindOf(d.status) === '正常' || kindOf(d.status) === '') ? 'installed' : 'keep'; }
+  if (p.type === 'new') f.status = normal;
+  return f;
+}
+
+function chipGroup(name, options, selected, multi, statusStyle, cls) {
+  return '<div class="chips' + (cls ? ' ' + cls : '') + '">' + options.map(function (o) {
+    var v = typeof o === 'string' ? o : o.value;
+    var label = typeof o === 'string' ? o : o.label;
+    var sub = typeof o === 'string' ? '' : (o.sub || '');
+    var on = multi ? selected.indexOf(v) >= 0 : selected === v;
+    var style = statusStyle ? ' status" style="--c:' + esc(statusInfo(v).color) : '';
+    return '<button type="button" class="chip' + style + '" data-act="' + name + '" data-v="' + esc(v) + '" aria-pressed="' + on + '">' +
+      (statusStyle ? '<i class="dot"></i>' : '') + '<span>' + esc(label) + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span></button>';
+  }).join('') + '</div>';
+}
+
+function paintForm() {
+  var F = st.form;
+  var d = F.current;
+  var titles = { report: '故障・不具合の報告', move: '別の場所へ移動', status: '状態・メモの変更', new: '端末の新規登録' };
+  var html = '<div class="card" style="padding:12px 16px"><div class="serial" style="font-size:21px;margin:0">' + esc(F.serial) + '</div>' +
+    (d ? '<div class="li-sub">' + esc(d.location) + (d.spot ? '・' + esc(d.spot) : '') + '　' + badge(d.status) + '</div>' : '') + '</div>';
+  var showSymptoms = F.type === 'report' || (F.type === 'status' && kindOf(F.status) === '故障');
+
+  if (F.type === 'new') {
+    if (!patternOk(F.serial)) html += '<div class="note warn">' + I.alert + '<div>いつもの番号の形と違います。黄色いシールの番号と同じか確認してください。</div></div>';
+    html += '<div class="field"><span class="label">設置場所<span class="req">必須</span></span>' + pickerHtml(F.location) + '</div>';
+  }
+  if (F.type === 'move') {
+    html += '<div class="field"><span class="label">移動先<span class="req">必須</span></span>' + pickerHtml(F.location) + '</div>';
+    var opts = [];
+    var cur = d.status;
+    if (F.moveState === 'keep' || !(kindOf(cur) === '正常' || kindOf(cur) === '')) opts.push({ value: 'keep', label: '今の状態のまま（' + cur + '）' });
+    opts.push({ value: 'installed', label: 'もう設置した', sub: '→ ' + normalStatus() });
+    if (statusByKind('移動')) opts.push({ value: 'transit', label: 'これから運ぶ・発送する', sub: '→ ' + statusByKind('移動') });
+    if (statusByKind('保管')) opts.push({ value: 'stored', label: '保管する（使わない）', sub: '→ ' + statusByKind('保管') });
+    html += '<div class="field"><span class="label">移動したあとの状態</span>' + chipGroup('fMove', opts, F.moveState, false, false, 'col') + '</div>';
+  }
+  if (F.type === 'status' || F.type === 'new') {
+    html += '<div class="field"><span class="label">状態</span>' +
+      chipGroup('fStatus', st.boot.statuses.map(function (s) { return { value: s.name, label: s.name, sub: F.type === 'status' ? s.desc : '' }; }), F.status, false, true) + '</div>';
+  }
+  if (showSymptoms) {
+    html += '<div class="field"><span class="label">症状（当てはまるものをすべて）</span>' + chipGroup('fSym', st.boot.symptoms, F.symptoms, true) + '</div>';
+  }
+  if (F.type === 'status') {
+    html += '<div class="field"><span class="label">設置場所</span>' + pickerHtml(F.location) + '</div>';
+  }
+  if (F.type !== 'report' && st.boot.spots.length) {
+    html += '<div class="field"><span class="label">設置個所' + (F.type === 'move' ? '（移動先での置き場所）' : '') + '</span>' + chipGroup('fSpot', st.boot.spots, F.spot, false) + '</div>';
+  }
+  if (F.type === 'new') {
+    var models = uniq((st.boot.models || []).map(function (m) { return m.name; }).concat(F.model ? [F.model] : []));
+    html += '<label class="field"><span>機種</span><input type="text" id="fModel" list="modelList" value="' + esc(F.model) + '" maxlength="40">' +
+      '<datalist id="modelList">' + models.map(function (m) { return '<option value="' + esc(m) + '">'; }).join('') + '</datalist></label>';
+  }
+  if (F.type === 'status' || F.type === 'new') {
+    html += '<label class="field"><span>端末のメモ（いつも表示されます）</span><textarea id="fMemo" maxlength="500" placeholder="例：受付の上に設置">' + esc(F.memo) + '</textarea></label>';
+  }
+  html += '<label class="field"><span>' + (F.type === 'report' ? '詳しい様子（任意）' : 'コメント（任意）') + '</span><textarea id="fComment" maxlength="500" placeholder="' +
+    (F.type === 'report' ? '例：朝から画面が真っ暗。電源ランプは点灯している' : '例：改装のため移動') + '">' + esc(F.comment) + '</textarea></label>';
+  if (F.type === 'report' || F.type === 'status' || F.type === 'new') {
+    html += '<div class="field"><span class="label">写真（任意・3枚まで）</span><div class="photos">' +
+      F.photos.map(function (src, i) { return '<div class="thumb"><img src="' + src + '" alt="添付写真' + (i + 1) + '"><button type="button" data-act="rmPhoto" data-i="' + i + '" aria-label="写真を削除">×</button></div>'; }).join('') +
+      (F.photos.length < 3 ? '<label class="thumb add" for="photoInput">' + I.camera + '<span>撮影する</span></label><label class="thumb add" for="photoPick">' + I.image + '<span>アルバム</span></label>' : '') +
+      '</div></div>';
+  }
+  var submit = { report: ['danger', '故障・不具合を報告する'], move: ['primary', '移動を記録する'], status: ['primary', '保存する'], new: ['primary', 'この端末を登録する'] }[F.type];
+  html += '<div class="sticky-actions"><button class="btn ' + submit[0] + '" data-act="submit">' + esc(submit[1]) + '</button></div>';
+  setView(html, titles[F.type]);
+
+  var sync = function () {
+    var c = $('#fComment'); if (c) F.comment = c.value;
+    var m = $('#fMemo'); if (m) F.memo = m.value;
+    var md = $('#fModel'); if (md) F.model = md.value;
+  };
+  $$('textarea,input', $('#view')).forEach(function (el) { el.addEventListener('input', sync); });
+  acts.pickLoc = async function () {
+    sync();
+    var name = await pickStore(F.type === 'move' ? '移動先を選ぶ' : '設置場所を選ぶ', F.location || (d && d.location));
+    if (name) { F.location = name; paintForm(); }
+  };
+  acts.fStatus = function (el) { sync(); F.status = el.getAttribute('data-v'); paintForm(); };
+  acts.fMove = function (el) { sync(); F.moveState = el.getAttribute('data-v'); paintForm(); };
+  acts.fSpot = function (el) { sync(); var v = el.getAttribute('data-v'); F.spot = F.spot === v ? '' : v; paintForm(); };
+  acts.fSym = function (el) {
+    sync();
+    var v = el.getAttribute('data-v');
+    var i = F.symptoms.indexOf(v);
+    if (i >= 0) F.symptoms.splice(i, 1); else F.symptoms.push(v);
+    paintForm();
+  };
+  acts.rmPhoto = function (el) { sync(); F.photos.splice(Number(el.getAttribute('data-i')), 1); paintForm(); };
+  acts.submit = function () { sync(); submitForm(); };
+}
+
+function pickerHtml(value) {
+  return '<button type="button" class="picker" data-act="pickLoc">' + I.pin + '<span class="grow">' +
+    (value ? esc(value) : '<span class="ph">タップして選ぶ</span>') + '</span>' + I.chevron + '</button>';
+}
+
+async function submitForm() {
+  var F = st.form;
+  var d = F.current;
+  if ((F.type === 'new' || F.type === 'move') && !F.location) { toast(F.type === 'move' ? '移動先を選んでください' : '設置場所を選んでください'); globalActsPick(); return; }
+  if (F.type === 'report' && !F.symptoms.length && !F.comment.trim()) { toast('症状を選ぶか、様子を書いてください'); return; }
+  if (F.type === 'move' && d && normKey(F.location) === normKey(d.location) && F.moveState === 'keep' && F.spot === d.spot) { toast('今と同じ場所です'); return; }
+  if (F.type === 'new' && !patternOk(F.serial)) {
+    var yes = await confirmModal('このまま登録しますか？', F.serial + '\n\nいつもの番号の形と違います。読み取りミスの可能性があります。', '登録する');
+    if (!yes) return;
+  }
+  var base = { serial: F.serial, clientOpId: F.opId, comment: F.comment.trim(), photos: F.photos.slice() };
+  var p;
+  if (F.type === 'new') {
+    p = Object.assign(base, { mode: 'new', location: F.location, spot: F.spot, status: F.status, symptoms: kindOf(F.status) === '故障' ? F.symptoms : [], model: F.model.trim(), deviceMemo: F.memo.trim() });
+  } else {
+    p = Object.assign(base, { mode: 'update', baseRev: F.baseRev });
+    if (F.type === 'report') Object.assign(p, { kind: 'report', status: statusByKind('故障') || d.status, symptoms: F.symptoms });
+    if (F.type === 'move') {
+      var target = { installed: normalStatus(), transit: statusByKind('移動'), stored: statusByKind('保管'), keep: d.status }[F.moveState] || d.status;
+      Object.assign(p, { kind: 'move', location: F.location, status: target, spot: F.spot });
+    }
+    if (F.type === 'status') Object.assign(p, { kind: 'status', status: F.status, symptoms: kindOf(F.status) === '故障' ? F.symptoms : [], location: F.location, spot: F.spot, deviceMemo: F.memo.trim() });
+  }
+  await submitSave(p, F);
+}
+function globalActsPick() { if (acts.pickLoc) acts.pickLoc(); }
+
+async function submitSave(payload, F) {
+  var r;
+  try { r = await run(function () { return api('saveDevice', payload); }, payload.photos && payload.photos.length ? '写真を送って保存しています…' : '保存しています…'); }
+  catch (e) { return; }
+  if (r.result === 'saved') {
+    cacheDevice(r.device);
+    rememberStore(r.device.location);
+    addOp({ opId: r.opId, serial: r.device.serial, title: r.device.serial, op: r.op, at: Date.now(), undoable: r.undoable });
+    st.form = null;
+    var params = { kind: 'save', serial: r.device.serial, op: r.op, opId: r.opId, undoable: r.undoable, device: r.device };
+    if (topName() === 'form') go('done', params, { replace: true }); else go('done', params);
+    return;
+  }
+  if (F) F.opId = newId();
+  if (r.result === 'conflict') {
+    var last = r.last;
+    openModal('<h3>ほかの人が先に更新しました</h3><p class="body">' +
+      (last ? esc(last.u) + 'さんが「' + esc(last.op) + '」を保存しました（' + esc(ago(last.t)) + '）。\n' : '') +
+      'いまの状態：' + esc(r.device.status) + '／' + esc(r.device.location) + '</p><div class="stack">' +
+      '<button class="btn primary" data-act="latest">最新の状態を見る</button>' +
+      (F ? '<button class="btn" data-act="force">内容を確認して、このまま保存する</button>' : '') +
+      '<button class="btn ghost" data-act="close">閉じる</button></div>',
+      {
+        latest: function () { closeModal(); cacheDevice(r.device); st.form = null; if (topName() === 'form') back(); else render(); },
+        force: function () { closeModal(); F.baseRev = r.device.rev; F.current = r.device; st.cur.device = r.device; toast('最新の状態に合わせました。内容を確認して保存してください'); paintForm(); },
+        close: function () { closeModal(); if (topName() === 'device') render(); }
+      });
+    return;
+  }
+  if (r.result === 'exists') {
+    cacheDevice(r.device);
+    openModal('<h3>この端末はすでに登録されています</h3><p class="body"><span class="mono">' + esc(r.device.serial) + '</span>\n' + esc(r.device.location) + '／' + esc(r.device.status) +
+      '\n\nほかの人が先に登録したようです。</p><button class="btn primary" data-act="open">この端末を開く</button>',
+      { open: function () { closeModal(); st.form = null; if (topName() === 'form') back(); else openSerial(r.device.serial); } });
+    return;
+  }
+  if (r.result === 'notfound') {
+    st.devices.delete(r.serial);
+    openModal('<h3>台帳に見つかりません</h3><p class="body">この端末は台帳から削除された可能性があります。新しく登録しますか？</p><div class="stack">' +
+      '<button class="btn primary" data-act="reg">新しく登録する</button><button class="btn ghost" data-act="close">閉じる</button></div>',
+      { reg: function () { closeModal(); st.form = null; st.cur = { serial: r.serial, device: null }; go('form', { serial: r.serial, type: 'new' }, { replace: topName() === 'form' }); }, close: function () { closeModal(); } });
+  }
+}
+
+/* =========================================================
+ * 画面：保存完了
+ * ========================================================= */
+screens.done = function (p) {
+  var html = '<div class="done-mark">' + I.check + '</div>';
+  if (p.kind === 'save') {
+    var d = p.device;
+    html += '<h1 class="done-title">「' + esc(p.op) + '」を記録しました</h1>' +
+      '<div class="card center" style="margin-top:14px"><div class="serial" style="font-size:20px;margin:0 0 6px">' + esc(d.serial) + '</div>' +
+      pill(d.status) + '<div class="place" style="justify-content:center">' + I.pin + '<span>' + esc(d.location) + (d.spot ? '・' + esc(d.spot) : '') + '</span></div></div>';
+  } else if (p.kind === 'inv') {
+    var c = p.counts;
+    html += '<h1 class="done-title">棚卸を確定しました</h1><div class="card"><div class="label">' + esc(p.location) + '</div><dl class="kv">' +
+      '<dt>確認した端末</dt><dd>' + c.checked + '台</dd>' +
+      (c.moved ? '<dt>この場所へ移動</dt><dd>' + c.moved + '台</dd>' : '') +
+      (c.registered ? '<dt>新しく登録</dt><dd>' + c.registered + '台</dd>' : '') +
+      (c.revived ? '<dt>稼働中に戻した</dt><dd>' + c.revived + '台</dd>' : '') +
+      (c.missing ? '<dt>所在不明にした</dt><dd>' + c.missing + '台</dd>' : '') +
+      (c.skipped ? '<dt>記録しなかった</dt><dd>' + c.skipped + '台</dd>' : '') + '</dl>' +
+      (p.warnings && p.warnings.length ? '<div class="note warn" style="margin-top:12px">' + I.alert + '<div>' + p.warnings.map(esc).join('<br>') + '</div></div>' : '') + '</div>';
+  }
+  var op = st.ops.filter(function (o) { return o.opId === p.opId; })[0];
+  html += '<div class="stack">';
+  html += p.kind === 'inv' ? '<button class="btn primary" data-act="goHome">ホームへ戻る</button>' : scanButtonHtml('続けて読み取る').replace(' hero', '');
+  if (p.kind === 'save') html += '<button class="btn" data-act="openSerial" data-serial="' + esc(p.serial) + '">' + I.list + 'この端末の詳細・履歴を見る</button>';
+  if (op && canUndo(op)) html += '<button class="btn" data-act="undo" data-op="' + esc(p.opId) + '">' + I.undo + '間違えたので元に戻す</button>';
+  if (p.kind === 'save') html += '<button class="btn ghost" data-act="goHome">ホームへ</button>';
+  html += '</div>';
+  if (op && canUndo(op)) html += '<p class="hint center">' + st.boot.settings.undoMinutes + '分以内なら「元に戻す」ができます</p>';
+  setView(html, '記録しました');
+};
+
+async function doUndo(opId) {
+  var op = st.ops.filter(function (o) { return o.opId === opId; })[0];
+  var ok = await confirmModal('元に戻しますか？', (op ? op.title + '\n「' + op.op + '」' : 'この操作') + 'を取り消して、記録する前の状態に戻します。', '元に戻す', true);
+  if (!ok) return;
+  var r;
+  try { r = await run(function () { return api('undo', { opId: opId, clientOpId: newId() }); }, '元に戻しています…'); }
+  catch (e) { return; }
+  if (op) { op.undone = true; store.set('ops', st.ops); }
+  if (!r.okCount) {
+    alertModal('元に戻せませんでした', r.items.map(function (x) { return x.serial + '：' + x.reason; }).join('\n'));
+    return;
+  }
+  try { await loadBoot(); } catch (e) { /* 後で更新 */ }
+  if (r.ngCount) alertModal('一部だけ元に戻しました', r.items.filter(function (x) { return !x.ok; }).map(function (x) { return x.serial + '：' + x.reason; }).join('\n'));
+  else toast('元に戻しました');
+  if (topName() === 'done') { if (st.stack.length > 1) back(); else go('home', null, { root: true }); }
+  else render();
+}
+
+/* =========================================================
+ * 画面：棚卸
+ * ========================================================= */
+function saveInv() { if (st.inv) store.set('inv', st.inv); else store.del('inv'); }
+function invTargetKinds(k) { return k === '正常' || k === '故障' || k === '保管' || k === '不明' || k === ''; }
+function invExpected() {
+  var loc = normKey(st.inv.location);
+  var out = [];
+  st.devices.forEach(function (d) { if (normKey(d.l) === loc && invTargetKinds(kindOf(d.st))) out.push(d); });
+  return out;
+}
+
+screens.invPick = function () {
+  var names = storeNames();
+  var counts = {};
+  st.devices.forEach(function (d) { if (invTargetKinds(kindOf(d.st))) counts[d.l] = (counts[d.l] || 0) + 1; });
+  var html = '';
+  if (st.inv) {
+    html += '<div class="card"><div class="label">途中の棚卸があります</div><p style="margin:0 0 12px"><b>' + esc(st.inv.location) + '</b>・' + st.inv.items.length + '台読み取り済み</p>' +
+      '<div class="stack"><button class="btn primary" data-act="resumeInv">続きから再開する</button><button class="btn ghost" data-act="discard">破棄して新しく始める</button></div></div>';
+  }
+  html += '<p class="hint" style="margin:0 4px 12px">棚卸では、その場所にある端末をまとめて読み取り、台帳との違い（見つからない・別の場所で登録されている・未登録）を確認できます。</p>';
+  html += '<input type="search" id="invQ" placeholder="店舗名で絞り込み" autocomplete="off" style="margin-bottom:12px"><div class="stack" id="invStores"></div>';
+  setView(html, '棚卸：場所を選ぶ');
+  var draw = function (q) {
+    var k = normKey(q);
+    var recent = st.recentStores.filter(function (n) { return names.indexOf(n) >= 0; });
+    var list = k ? names.filter(function (n) { return normKey(n).indexOf(k) >= 0; }) : uniq(recent.concat(names));
+    $('#invStores').innerHTML = list.map(function (n) {
+      return '<button class="btn left" data-act="startInv" data-name="' + esc(n) + '">' + I.pin + '<span class="grow">' + esc(n) + '</span><small style="color:var(--muted)">台帳 ' + (counts[n] || 0) + '台</small></button>';
+    }).join('') || '<p class="empty">見つかりません</p>';
+  };
+  draw('');
+  $('#invQ').addEventListener('input', function (e) { draw(e.target.value); });
+  acts.discard = async function () {
+    if (!(await confirmModal('途中の棚卸を破棄しますか？', '読み取った' + st.inv.items.length + '台の記録は保存されません。', '破棄する', true))) return;
+    st.inv = null; saveInv(); render();
+  };
+  acts.startInv = async function (el) {
+    var n = el.getAttribute('data-name');
+    if (st.inv && st.inv.items.length && !(await confirmModal('途中の棚卸を破棄しますか？', st.inv.location + 'で読み取った' + st.inv.items.length + '台の記録は保存されません。', '破棄して始める', true))) return;
+    st.inv = { location: n, items: [], startedAt: Date.now(), last: null };
+    saveInv();
+    rememberStore(n);
+    go('inv', null, { replace: true });
+  };
+};
+
+function invAdd(raw, silent) {
+  var s = normSerial(raw);
+  var res;
+  if (!st.inv) return { kind: 'bad', text: '' };
+  if (!s || !SERIAL_RE.test(s)) {
+    res = { kind: 'bad', s: s, text: 'シリアル番号ではないバーコードです' };
+  } else if (st.inv.items.some(function (i) { return i.s === s; })) {
+    res = { kind: 'dup', s: s, text: s + '：読み取り済みです' };
+  } else {
+    var d = st.devices.get(s);
+    var kind = !d ? 'new' : (normKey(d.l) !== normKey(st.inv.location) ? 'moved' : 'ok');
+    st.inv.items.unshift({ s: s, t: Date.now(), kind: kind });
+    res = { kind: kind, s: s, text: kind === 'ok' ? s + '：OK' : kind === 'new' ? s + '：台帳にない端末' : s + '：台帳では「' + d.l + '」' };
+  }
+  st.inv.last = res;
+  saveInv();
+  feedback(res.kind === 'ok' ? 'ok' : res.kind === 'dup' ? 'dup' : 'warn');
+  if (topName() === 'inv') render();
+  else if (!silent && res.kind === 'dup') toast('この端末はもう読み取っています');
+  return res;
+}
+
+function invManual() {
+  openModal('<h3>番号を入力して追加</h3><form id="invManForm" autocomplete="off"><input id="invMan" class="big" type="text" autocapitalize="characters" autocorrect="off" spellcheck="false" enterkeyhint="done" placeholder="PAC07A0100832" data-autofocus>' +
+    '<p class="hint">下4桁でも候補を出します</p><div id="invManSug"></div>' +
+    '<div class="stack"><button class="btn primary" type="submit">追加する</button><button class="btn ghost" type="button" data-act="close">閉じる</button></div></form>',
+    { close: function () { closeModal(); }, pickSug: function (el) { closeModal(); invAdd(el.getAttribute('data-serial')); } });
+  var inp = $('#invMan');
+  inp.addEventListener('input', function () {
+    var m = inp.value.trim().length >= 3 ? matchSerials(inp.value, 6) : [];
+    $('#invManSug').innerHTML = m.length ? '<div class="stack" style="margin-bottom:12px">' + m.map(function (d) {
+      return '<button type="button" class="btn left small" style="width:100%" data-act="pickSug" data-serial="' + esc(d.s) + '"><span class="mono grow">' + esc(d.s) + '</span><small>' + esc(d.l) + '</small></button>';
+    }).join('') + '</div>' : '';
+  });
+  $('#invManForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var v = inp.value;
+    if (!normSerial(v)) return;
+    var m = st.devices.has(normSerial(v)) ? [] : matchSerials(v, 2);
+    closeModal();
+    invAdd(m.length === 1 ? m[0].s : v);
+  });
+}
+
+screens.inv = function () {
+  if (!st.inv) { go('invPick', null, { replace: true }); return; }
+  var inv = st.inv;
+  var expected = invExpected();
+  var scanned = {};
+  inv.items.forEach(function (i) { scanned[i.s] = i; });
+  var foundExpected = expected.filter(function (d) { return scanned[d.s]; }).length;
+  var notYet = expected.filter(function (d) { return !scanned[d.s]; });
+  var pct = expected.length ? Math.round(foundExpected / expected.length * 100) : 0;
+  var live = scanMode() === 'live';
+  var html = '<div class="card"><div class="label">棚卸中の場所</div><div style="font-size:19px;font-weight:800">' + esc(inv.location) + '</div>' +
+    '<div class="progress" aria-hidden="true"><i style="width:' + pct + '%"></i></div>' +
+    '<div class="li-sub">台帳の ' + expected.length + '台中 <b style="color:var(--ink)">' + foundExpected + '台</b> を確認・読み取り合計 ' + inv.items.length + '台</div></div>';
+  if (inv.last) {
+    var icon = inv.last.kind === 'ok' ? I.check : I.alert;
+    html += '<div class="flash ' + esc(inv.last.kind) + '" aria-live="polite">' + icon + '<span>' + esc(inv.last.text) + '</span></div>';
+  }
+  html += live ? '<button class="btn primary hero scan" data-act="scan">' + I.camera + '<span>続けて読み取る</span><small>かざすだけで次々に読み取ります</small></button>' :
+    scanButtonHtml('撮影して追加', '1枚に何台写っていてもOK');
+  html += '<div class="row2" style="margin-top:10px"><button class="btn" data-act="man">' + I.keyboard + '番号で追加</button>' +
+    '<label class="btn" for="pickInput">' + I.image + '写真から</label></div>';
+  html += '<button class="btn okb" data-act="finish"' + (inv.items.length || expected.length ? '' : ' disabled') + '>' + I.check + '棚卸を終えて確認する</button>';
+
+  if (inv.items.length) {
+    html += '<h2 class="sec">読み取った端末<small>' + inv.items.length + '台</small></h2><div class="card list" style="padding:0">' +
+      inv.items.map(function (it, idx) {
+        var d = st.devices.get(it.s);
+        var k = it.kind;
+        var sub = k === 'ok' ? '台帳どおり' : k === 'new' ? '台帳にない端末' : '台帳では「' + (d ? d.l : '') + '」';
+        return '<div class="li"><span class="kind ' + k + '">' + (k === 'ok' ? I.check : k === 'new' ? I.plus : I.move) + '</span>' +
+          '<div class="li-main"><span class="li-top"><span class="mono">' + esc(it.s) + '</span>' + (d ? badge(d.st) : '') + '</span><span class="li-sub">' + esc(sub) + '</span></div>' +
+          '<button class="x-btn" data-act="rm" data-i="' + idx + '" aria-label="' + esc(it.s) + 'を取り消す">' + I.x + '</button></div>';
+      }).join('') + '</div>';
+  }
+  if (notYet.length) {
+    html += '<details class="card"' + (inv.items.length ? '' : ' open') + '><summary>まだ読み取っていない端末（' + notYet.length + '台）</summary><div class="list">' +
+      notYet.map(function (d) { return '<div class="li"><div class="li-main"><span class="li-top"><span class="mono">' + esc(d.s) + '</span>' + badge(d.st) + '</span><span class="li-sub">' + esc(d.p || '') + (d.m ? '・' + esc(d.m) : '') + '</span></div></div>'; }).join('') +
+      '</div></details>';
+  }
+  setView(html, '棚卸');
+  acts.man = function () { invManual(); };
+  acts.rm = function (el) {
+    inv.items.splice(Number(el.getAttribute('data-i')), 1);
+    inv.last = null;
+    saveInv();
+    render();
+  };
+  acts.finish = function () { go('invDone'); };
+};
+
+screens.invDone = function () {
+  if (!st.inv) { go('home', null, { root: true }); return; }
+  var inv = st.inv;
+  var expected = invExpected();
+  var scanned = {};
+  inv.items.forEach(function (i) { scanned[i.s] = i; });
+  var ok = [], moved = [], news = [], revive = [];
+  inv.items.forEach(function (i) {
+    var d = st.devices.get(i.s);
+    if (!d) { news.push(i.s); return; }
+    if (normKey(d.l) !== normKey(inv.location)) moved.push(d); else ok.push(d);
+    var k = kindOf(d.st);
+    if (k === '不明' || k === '移動') revive.push(d);
+  });
+  var missing = expected.filter(function (d) { return !scanned[d.s]; });
+  var sel = inv.sel = inv.sel || { move: true, reg: true, revive: true, missing: false };
+  var lost = statusByKind('不明');
+  var html = '<div class="card"><div class="label">場所</div><div style="font-size:19px;font-weight:800">' + esc(inv.location) + '</div>' +
+    '<dl class="kv"><dt>台帳どおり</dt><dd><b>' + ok.length + '台</b></dd><dt>読み取り合計</dt><dd>' + inv.items.length + '台</dd></dl></div>';
+  var block = function (key, title, list, label, cls, fmt) {
+    if (!list.length) return '';
+    return '<div class="card"><div class="li-top" style="margin-bottom:6px"><span>' + title + '</span><span class="badge">' + list.length + '台</span></div>' +
+      '<div class="li-sub" style="margin-bottom:6px">' + list.slice(0, 30).map(fmt).join('<br>') + (list.length > 30 ? '<br>ほか' + (list.length - 30) + '台' : '') + '</div>' +
+      '<label class="check"><input type="checkbox" data-sel="' + key + '"' + (sel[key] ? ' checked' : '') + '><span>' + label + '</span></label></div>';
+  };
+  html += block('move', '別の場所で登録されていた端末', moved, 'この場所（' + esc(inv.location) + '）へ移動したことにする', 'moved',
+    function (d) { return '<span class="mono">' + esc(d.s) + '</span>（台帳：' + esc(d.l) + '）'; });
+  html += block('reg', '台帳にない端末', news, 'この場所の端末として登録する（' + esc(normalStatus()) + '）', 'new',
+    function (s) { return '<span class="mono">' + esc(s) + '</span>' + (patternOk(s) ? '' : ' <b class="warn-text">形式が違います</b>'); });
+  html += block('revive', '移動中・所在不明になっていた端末', revive, esc(normalStatus()) + 'に戻す', 'ok',
+    function (d) { return '<span class="mono">' + esc(d.s) + '</span>（' + esc(d.st) + '）'; });
+  if (lost) {
+    html += block('missing', '見つからなかった端末', missing, '「' + esc(lost) + '」にする（本当に無いときだけ）', 'bad',
+      function (d) { return '<span class="mono">' + esc(d.s) + '</span>（' + esc(d.st) + (d.p ? '・' + esc(d.p) : '') + '）'; });
+  }
+  if (!moved.length && !news.length && !missing.length) html += '<div class="note ok">' + I.check + '<div>台帳との違いはありません。</div></div>';
+  html += '<div class="sticky-actions"><div class="stack"><button class="btn okb" data-act="commit">' + I.check + 'この内容で棚卸を確定する</button>' +
+    '<button class="btn ghost" data-act="backInv">読み取りに戻る</button></div></div>';
+  setView(html, '棚卸の確認');
+  $$('input[data-sel]').forEach(function (cb) {
+    cb.addEventListener('change', function () { sel[cb.getAttribute('data-sel')] = cb.checked; saveInv(); });
+  });
+  acts.backInv = function () { back(); };
+  acts.commit = async function () {
+    var news2 = news.filter(function (s) { return SERIAL_RE.test(s); });
+    if (sel.reg && news2.some(function (s) { return !patternOk(s); })) {
+      if (!(await confirmModal('形式の違う番号があります', '読み取りミスの可能性があります。このまま登録しますか？\n（登録しない場合は「読み取りに戻る」で×を押して外してください）', '登録する'))) return;
+    }
+    var payload = {
+      location: inv.location,
+      scanned: inv.items.map(function (i) { return i.s; }),
+      move: sel.move ? moved.map(function (d) { return d.s; }) : [],
+      register: sel.reg ? news2 : [],
+      revive: sel.revive ? revive.map(function (d) { return d.s; }) : [],
+      missing: sel.missing ? missing.map(function (d) { return d.s; }) : [],
+      clientOpId: inv.opId || (inv.opId = newId())
+    };
+    saveInv();
+    var r;
+    try { r = await run(function () { return api('inventoryCommit', payload); }, '棚卸を保存しています…'); }
+    catch (e) { return; }
+    var loc = inv.location;
+    st.inv = null;
+    saveInv();
+    try { await loadBoot(); } catch (e) { /* 後で更新 */ }
+    addOp({ opId: r.opId, serial: '', title: '棚卸：' + loc, op: '確認' + r.counts.checked + '台', at: Date.now(), undoable: r.undoable });
+    go('done', { kind: 'inv', opId: r.opId, counts: r.counts, warnings: r.warnings, location: loc }, { root: true });
+  };
+};
+
+/* =========================================================
+ * 画面：設定
+ * ========================================================= */
+function isIosSafariLike() {
+  var ua = navigator.userAgent || '';
+  return /iP(hone|ad|od)/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+function isStandalone() {
+  return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+}
+function installCardHtml() {
+  if (isStandalone()) return '';
+  if (st.deferredInstall) {
+    return '<div class="card"><div class="label">アプリとして使う</div>' +
+      '<button class="btn primary" data-act="installApp">' + I.plus + 'ホーム画面に追加（インストール）</button>' +
+      '<p class="hint" style="margin:10px 0 0">ホーム画面からワンタップで開けるようになります。</p></div>';
+  }
+  if (isIosSafariLike()) {
+    return '<div class="card"><div class="label">アプリとして使う</div>' +
+      '<p class="hint" style="margin:0">Safari の共有ボタンから「ホーム画面に追加」を選ぶと、ホーム画面からワンタップで開けるようになります。</p></div>';
+  }
+  return '';
+}
+screens.settings = function () {
+  var modes = [
+    { value: 'auto', label: 'おまかせ（おすすめ）', sub: '使える場合は「かざす」、使えない場合は「撮影」' },
+    { value: 'photo', label: '撮影して読み取る', sub: 'カメラで撮った写真から読み取ります' },
+    { value: 'live', label: 'かざして読み取る', sub: 'カメラ映像から自動で読み取ります（使えない環境あり）' }
+  ];
+  var html = '<div class="card"><div class="label">お名前</div><div class="li-top"><span style="font-size:18px">' + esc(st.user) + '</span><button class="btn small" data-act="rename">変更</button></div></div>' +
+    '<div class="card"><div class="label">読み取り方法</div><div class="chips col">' +
+    modes.map(function (m) { return '<button class="chip" data-act="mode" data-v="' + m.value + '" aria-pressed="' + (st.scanMode === m.value) + '"><span>' + esc(m.label) + '<small>' + esc(m.sub) + '</small></span></button>'; }).join('') +
+    '</div><p class="hint" style="margin-bottom:0">いまの方法：' + (scanMode() === 'live' ? 'かざして読み取る' : '撮影して読み取る') + (Decoder.engine ? '（' + esc(Decoder.engine) + '）' : '') + '</p></div>' +
+    installCardHtml() +
+    '<div class="stack"><button class="btn" data-act="refresh">' + I.refresh + '最新の情報にする</button>' +
+    '<button class="btn" data-act="testScan">' + I.camera + '読み取り機能を準備・確認する</button>' +
+    '<button class="btn ghost" data-act="logout">合言葉を入力し直す（ログアウト）</button></div>' +
+    '<p class="foot">バージョン ' + APP_VERSION + '・接続：' + ({ gas: 'Googleスプレッドシート', web: '外部ページ', mock: 'お試し' }[MODE] || MODE) +
+    '<br>この端末のID：' + esc(st.deviceId.slice(0, 8)) + '・' + esc(deviceLabel()) + '</p>';
+  setView(html, '設定');
+  acts.mode = function (el) { st.scanMode = el.getAttribute('data-v'); st.liveFailed = false; store.set('scanMode', st.scanMode); render(); };
+  acts.rename = function () {
+    openModal('<h3>お名前の変更</h3><form id="nameForm"><input id="newName" type="text" maxlength="20" value="' + esc(st.user) + '" data-autofocus>' +
+      '<div class="stack" style="margin-top:12px"><button class="btn primary" type="submit">保存</button><button class="btn ghost" type="button" data-act="close">やめる</button></div></form>',
+      { close: function () { closeModal(); } });
+    $('#nameForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var v = $('#newName').value.trim();
+      if (!v) return;
+      st.user = v; store.set('user', v); closeModal(); render(); toast('お名前を変更しました');
+    });
+  };
+  acts.testScan = function () {
+    run(function () { return Decoder.ready(); }, '読み取り機能を準備しています…').then(function () {
+      alertModal('準備できました', '読み取り方式：' + Decoder.engine + '\nカメラ映像（かざす）：' + (liveAllowed() ? '使えます' : 'この画面では使えません（撮影で読み取ります）'));
+      render();
+    }, function () {});
+  };
+  acts.installApp = async function () {
+    var ev = st.deferredInstall;
+    if (!ev) return;
+    st.deferredInstall = null;
+    try { ev.prompt(); await ev.userChoice; } catch (err) { /* 中断されても問題なし */ }
+    render();
+  };
+  acts.logout = async function () {
+    if (!(await confirmModal('ログアウトしますか？', '次に開くときに合言葉の入力が必要になります。', 'ログアウト'))) return;
+    st.token = ''; store.del('token');
+    go('login', {}, { root: true });
+  };
+};
+
+/* =========================================================
+ * 起動
+ * ========================================================= */
+$('#btnBack').innerHTML = I.back;
+$('#btnSettings').innerHTML = I.gear;
+$('#btnBack').addEventListener('click', function () { back(); });
+$('#btnSettings').addEventListener('click', function () { go('settings'); });
+$('#tabHome').innerHTML = I.home + '<span>ホーム</span>';
+$('#tabList').innerHTML = I.list + '<span>一覧</span>';
+$('#tabSettings').innerHTML = I.gear + '<span>設定</span>';
+$('#tabScan').innerHTML = I.camera;
+$('#tabHome').addEventListener('click', function () { globalActs.goHome(); });
+$('#tabList').addEventListener('click', function () { globalActs.goList(); });
+$('#tabSettings').addEventListener('click', function () { go('settings'); });
+$('#tabScan').addEventListener('click', function () { globalActs.scan(); });
+if (MODE === 'gas' && google.script.history && google.script.history.setChangeHandler) google.script.history.setChangeHandler(onHistoryBack);
+else window.addEventListener('popstate', onHistoryBack);
+document.addEventListener('visibilitychange', function () { if (!document.hidden) refreshBootQuietly(); });
+
+/* PWA: Service Worker 登録とインストール促進 */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () { /* GAS配信時などは無視 */ }); });
+}
+window.addEventListener('beforeinstallprompt', function (e) {
+  e.preventDefault();
+  st.deferredInstall = e;
+  if (topName() === 'settings') render();
+});
+window.addEventListener('appinstalled', function () { st.deferredInstall = null; });
+
+function readStartParams() {
+  return new Promise(function (resolve) {
+    var fallback = setTimeout(function () { resolve({}); }, 1500);
+    try {
+      if (MODE === 'gas' && google.script.url) {
+        google.script.url.getLocation(function (loc) {
+          clearTimeout(fallback);
+          var p = (loc && loc.parameter) || {};
+          resolve({ key: p.key || '', serial: p.s || '' });
+        });
+        return;
+      }
+      var q = new URLSearchParams(location.search);
+      var h = new URLSearchParams((location.hash || '').replace(/^#/, ''));
+      clearTimeout(fallback);
+      resolve({ key: h.get('key') || q.get('key') || '', serial: h.get('s') || q.get('s') || '' });
+    } catch (e) { clearTimeout(fallback); resolve({}); }
+  });
+}
+function clearStartParams() {
+  try {
+    if (MODE === 'gas' && google.script.history) google.script.history.replace(null, {}, '');
+    else if (history.replaceState) history.replaceState(null, '', location.pathname);
+  } catch (e) { /* 何もしない */ }
+}
+
+function loadDemo() {
+  return new Promise(function (resolve) {
+    var s = document.createElement('script');
+    s.src = 'demo.js';
+    s.onload = function () {
+      if (typeof window.__startDemo__ !== 'function') { resolve(false); return; }
+      Promise.resolve(window.__startDemo__()).then(function () { resolve(!!window.__MOCK_API__); }, function () { resolve(false); });
+    };
+    s.onerror = function () { resolve(false); };
+    document.head.appendChild(s);
+  });
+}
+
+async function start() {
+  if (MODE === 'none') {
+    var demoOk = await loadDemo();
+    if (demoOk) {
+      MODE = 'mock';
+      window.ITV.MODE = MODE;
+    } else {
+      st.stack = [{ name: 'error', params: { title: '接続先が設定されていません', message: 'このページを外部に置く場合は、config.js の API_URL にGASのウェブアプリURLを入れてください。' } }];
+      render();
+      return;
+    }
+  }
+  var p = await readStartParams();
+  if (p.key || p.serial) clearStartParams();
+  if (p.key && !st.token) {
+    try { await run(function () { return login(p.key); }, '合言葉を確認しています…'); } catch (e) { /* ログイン画面へ */ }
+  }
+  if (!st.token) { go('login', {}, { root: true }); return; }
+  try {
+    showBusy('読み込み中…');
+    await loadBoot();
+  } catch (e) {
+    hideBusy();
+    if (e.code === 'AUTH') { handleError(e); return; }
+    go('error', { title: ERROR_TITLES[e.code] || '読み込めませんでした', message: e.message }, { root: true });
+    return;
+  }
+  hideBusy();
+  if (!st.user) { go('login', {}, { root: true }); return; }
+  go('home', null, { root: true });
+  if (p.serial) openSerial(p.serial);
+  setTimeout(function () { Decoder.ready().catch(function () { /* 必要なときに再試行 */ }); }, 1200);
+}
+
+window.ITV = { st: st, go: go, api: api, Decoder: Decoder, Live: Live, invAdd: invAdd, handleCodes: handleCodes, openSerial: openSerial, CONFIG: CONFIG, MODE: MODE };
+start();
+})();
+</script>
+</body>
+</html>

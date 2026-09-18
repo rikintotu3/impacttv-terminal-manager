@@ -1,0 +1,17 @@
+{
+  "name": "impactTV 端末管理",
+  "short_name": "端末管理",
+  "description": "黄色シールのバーコードを読み取り、端末の状態・場所・履歴を記録します",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#16345c",
+  "background_color": "#16345c",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
