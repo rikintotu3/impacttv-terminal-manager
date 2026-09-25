@@ -299,7 +299,7 @@ var CONFIG = Object.assign({
   FORCE_POLYFILL: false
 }, window.ITV_CONFIG || {});
 
-var APP_VERSION = '2.0.1';
+var APP_VERSION = '2.1.0';
 var IS_GAS = !!(window.google && google.script && google.script.run);
 var MODE = IS_GAS ? 'gas' : (CONFIG.API_URL ? 'web' : (window.__MOCK_API__ ? 'mock' : 'none'));
 var SERIAL_RE = /^[A-Z0-9\-_.\/+]{1,40}$/;
@@ -363,10 +363,16 @@ function ago(ms) {
   return fmtDate(ms, true);
 }
 
+function storageKey(k) {
+  // デモで作った履歴・棚卸・ログイン状態を、本番へ引き継がない。
+  var scoped = ['token', 'ops', 'inv', 'recentStores'].indexOf(k) >= 0;
+  var scope = IS_GAS ? 'gas' : (CONFIG.API_URL ? 'web.' + encodeURIComponent(CONFIG.API_URL) : 'demo');
+  return 'itv.' + (scoped ? scope + '.' : '') + k;
+}
 var store = {
-  get: function (k, d) { try { var v = localStorage.getItem('itv.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
-  set: function (k, v) { try { localStorage.setItem('itv.' + k, JSON.stringify(v)); } catch (e) { /* 保存できない環境 */ } },
-  del: function (k) { try { localStorage.removeItem('itv.' + k); } catch (e) { /* 何もしない */ } }
+  get: function (k, d) { try { var v = localStorage.getItem(storageKey(k)); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set: function (k, v) { try { localStorage.setItem(storageKey(k), JSON.stringify(v)); } catch (e) { /* 保存できない環境 */ } },
+  del: function (k) { try { localStorage.removeItem(storageKey(k)); } catch (e) { /* 何もしない */ } }
 };
 
 /* ---------- 状態 ---------- */
@@ -2024,6 +2030,10 @@ async function start() {
     return;
   }
   if (MODE === 'none') {
+    if (CONFIG.DEMO_MODE === false) {
+      go('error', { title: '本番の接続設定が必要です', message: '保存先が設定されていません。本部へ連絡してください。', reload: true }, { root: true });
+      return;
+    }
     var demoOk = await loadDemo();
     if (demoOk) {
       MODE = 'mock';
