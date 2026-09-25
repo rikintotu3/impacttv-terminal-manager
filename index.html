@@ -299,7 +299,7 @@ var CONFIG = Object.assign({
   FORCE_POLYFILL: false
 }, window.ITV_CONFIG || {});
 
-var APP_VERSION = '2.1.0';
+var APP_VERSION = '2.2.0';
 var IS_GAS = !!(window.google && google.script && google.script.run);
 var MODE = IS_GAS ? 'gas' : (CONFIG.API_URL ? 'web' : (window.__MOCK_API__ ? 'mock' : 'none'));
 var SERIAL_RE = /^[A-Z0-9\-_.\/+]{1,40}$/;
@@ -365,7 +365,7 @@ function ago(ms) {
 
 function storageKey(k) {
   // デモで作った履歴・棚卸・ログイン状態を、本番へ引き継がない。
-  var scoped = ['token', 'ops', 'inv', 'recentStores'].indexOf(k) >= 0;
+  var scoped = ['token', 'ops', 'inv', 'recentStores', 'hq'].indexOf(k) >= 0;
   var scope = IS_GAS ? 'gas' : (CONFIG.API_URL ? 'web.' + encodeURIComponent(CONFIG.API_URL) : 'demo');
   return 'itv.' + (scoped ? scope + '.' : '') + k;
 }
@@ -375,9 +375,22 @@ var store = {
   del: function (k) { try { localStorage.removeItem(storageKey(k)); } catch (e) { /* 何もしない */ } }
 };
 
+// 本部認証はこのタブのセッションだけに保持し、有効期限はサーバーでも検証する。
+function readHeadOfficeSession() {
+  try {
+    var session = JSON.parse(sessionStorage.getItem(storageKey('hq')) || 'null');
+    if (session && typeof session.token === 'string' && session.expiresAt > Date.now()) return session;
+    sessionStorage.removeItem(storageKey('hq'));
+  } catch (e) { /* 本部認証から開始 */ }
+  return { token: '', expiresAt: 0 };
+}
+var headOfficeSession = readHeadOfficeSession();
+
 /* ---------- 状態 ---------- */
 var st = {
   token: store.get('token', ''),
+  hqToken: headOfficeSession.token,
+  hqExpiresAt: headOfficeSession.expiresAt,
   user: store.get('user', ''),
   deviceId: store.get('deviceId', ''),
   scanMode: store.get('scanMode', 'auto'),
@@ -397,6 +410,22 @@ var st = {
 };
 if (!st.deviceId) { st.deviceId = newId(); store.set('deviceId', st.deviceId); }
 
+function setHeadOfficeSession(token, expiresAt) {
+  st.hqToken = token || '';
+  st.hqExpiresAt = Number(expiresAt) || 0;
+  if (st.boot) st.boot.headOfficeAuthorized = false;
+  try {
+    if (st.hqToken) sessionStorage.setItem(storageKey('hq'), JSON.stringify({ token: st.hqToken, expiresAt: st.hqExpiresAt }));
+    else sessionStorage.removeItem(storageKey('hq'));
+  } catch (e) { /* 保存不可でもこの画面では使える */ }
+}
+function isHeadOffice() {
+  return !!(st.hqToken && st.hqExpiresAt > Date.now() && st.boot && st.boot.headOfficeAuthorized);
+}
+function disposalStatus() {
+  return st.boot && st.boot.statuses.some(function (s) { return s.name === '廃棄' && s.kind === '終了'; }) ? '廃棄' : null;
+}
+
 function deviceLabel() {
   var ua = navigator.userAgent || '';
   var os = /iPhone/.test(ua) ? 'iPhone' : (/iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) ? 'iPad' :
@@ -412,7 +441,7 @@ function deviceLabel() {
 function AppError(code, message, extra) { var e = new Error(message); e.code = code; e.extra = extra; return e; }
 
 function api(action, payload) {
-  var req = { action: action, payload: payload || {}, token: st.token, user: st.user, device: { id: st.deviceId, label: deviceLabel() }, v: APP_VERSION };
+  var req = { action: action, payload: payload || {}, token: st.token, hqToken: st.hqToken || '', user: st.user, device: { id: st.deviceId, label: deviceLabel() }, v: APP_VERSION };
   return new Promise(function (resolve, reject) {
     function done(res) {
       if (typeof res === 'string') { try { res = JSON.parse(res); } catch (e) { res = null; } }
@@ -452,12 +481,20 @@ var ERROR_TITLES = {
   NETWORK: '通信できませんでした', BAD_PASS: '合言葉が違います', LOCKED: 'しばらくお待ちください', BUSY: '混み合っています',
   DUPLICATE_ROWS: '台帳に同じ番号が複数あります', UNDO_EXPIRED: '取り消せません', UNDO_NOT_FOUND: '取り消せません',
   BAD_LOCATION: '設置場所を確認してください', BAD_STATUS: '状態を確認してください', BAD_SERIAL: '番号を確認してください',
-  SETUP: '初期設定が必要です', BAD_PHOTO: '写真を送れませんでした', CONFIG: '設定が必要です'
+  SETUP: '初期設定が必要です', BAD_PHOTO: '写真を送れませんでした', CONFIG: '設定が必要です',
+  HQ_AUTH: '本部認証が必要です', HQ_BAD_PASS: '本部用の合言葉が違います', HQ_SETUP: '本部認証の設定が必要です'
 };
 function handleError(e) {
   if (e.code === 'AUTH') {
+    setHeadOfficeSession('', 0);
     st.token = ''; store.del('token');
     go('login', { message: e.message }, { root: true });
+    return;
+  }
+  if (e.code === 'HQ_AUTH') {
+    setHeadOfficeSession('', 0);
+    go('headOffice', { message: e.message, returnSerial: st.cur && st.cur.serial,
+      returnForm: topName() === 'form' ? topParams() : null });
     return;
   }
   if (e.code === 'NO_NAME') { go('login', { message: e.message }, { root: true }); return; }
@@ -467,6 +504,8 @@ function handleError(e) {
 async function loadBoot() {
   var b = await api('bootstrap');
   st.boot = b;
+  if (!b.headOfficeAuthorized) setHeadOfficeSession('', 0);
+  else st.hqExpiresAt = Number(b.headOfficeExpiresAt) || st.hqExpiresAt;
   st.devices = new Map(b.devices.map(function (d) { return [d.s, d]; }));
   st.statusMap = new Map(b.statuses.map(function (s) { return [s.name, s]; }));
   st.lastBoot = Date.now();
@@ -1140,7 +1179,7 @@ screens.error = function (p) {
     '<div class="stack"><button class="btn primary" data-act="retry">' + I.refresh + 'もう一度読み込む</button>' +
     '<button class="btn" data-act="relogin">合言葉を入力し直す</button></div>', appName());
   acts.retry = function () { if (p.reload) location.reload(); else start(); };
-  acts.relogin = function () { st.token = ''; store.del('token'); go('login', {}, { root: true }); };
+  acts.relogin = function () { setHeadOfficeSession('', 0); st.token = ''; store.del('token'); go('login', {}, { root: true }); };
 };
 
 /* =========================================================
@@ -1327,6 +1366,11 @@ function paintDevice() {
   acts.report = function () { go('form', { serial: c.serial, type: 'report' }); };
   acts.move = function () { go('form', { serial: c.serial, type: 'move' }); };
   acts.change = function () { go('form', { serial: c.serial, type: 'status' }); };
+  acts.dispose = function () {
+    if (!isHeadOffice()) { go('headOffice', { returnSerial: c.serial }); return; }
+    if (!c.loading && !c.error && d && disposalStatus() && d.status !== '廃棄') go('form', { serial: c.serial, type: 'dispose' });
+  };
+  acts.headOffice = function () { go('headOffice', { returnSerial: c.serial }); };
   acts.register = function () { go('form', { serial: c.serial, type: 'new' }); };
   acts.check = function () { quickSave('check'); };
   acts.revive = function () { quickSave('revive'); };
@@ -1383,7 +1427,7 @@ function paintDevice() {
     '修理': ['warn', '修理・交換に出している端末です'],
     '移動': ['info', '移動中の端末です（行き先：' + (d.location || '未設定') + '）'],
     '不明': ['warn', '所在不明になっている端末です'],
-    '終了': ['warn', '解約・返却済みの端末です。店舗にある場合は本部に連絡してください。']
+    '終了': ['warn', d.status === '廃棄' ? '本部で廃棄として記録した端末です。台帳・履歴は残り、棚卸の対象から外れます。契約の解約は別途確認してください。' : '解約・返却済みの端末です。店舗にある場合は本部に連絡してください。']
   }[kind];
   if (banner) html += '<div class="note ' + banner[0] + '">' + I.alert + '<div><b>' + esc(banner[1]) + '</b></div></div>';
   if (isStale({ st: d.status, ck: d.checkedAt }) && kind !== '終了' && d.checkedAt) {
@@ -1391,6 +1435,7 @@ function paintDevice() {
   }
 
   html += '<div class="stack">';
+  if (d.status !== '廃棄' || isHeadOffice()) {
   if (reviveLabel && d.status !== normal) html += '<button class="btn okb" data-act="revive">' + I.check + esc(reviveLabel) + '</button>';
   if (kind === '正常' || kind === '') html += '<button class="btn okb" data-act="check">' + I.check + '異常なし（確認を記録）</button>';
   if (kind !== '故障') html += '<button class="btn danger" data-act="report">' + I.alert + '故障・不具合を報告</button>';
@@ -1398,7 +1443,14 @@ function paintDevice() {
   html += '<button class="btn" data-act="move">' + I.move + '別の場所へ移動</button>';
   html += '<button class="btn" data-act="change">' + I.edit + '状態・メモを変更</button>';
   if (kind !== '正常' && kind !== '') html += '<button class="btn ghost" data-act="check">' + I.check + '確認だけ記録する</button>';
+  } else {
+    html += '<p class="hint">廃棄済み端末の変更には本部認証が必要です。</p><button class="btn" data-act="headOffice">本部として認証する</button>';
+  }
   html += '</div>';
+  if (kind !== '終了' && disposalStatus()) {
+    html += '<h2 class="sec">本部での確認後</h2><div class="card"><p class="hint" style="margin-top:0">故障の確認結果と理由を記録し、廃棄を確定します。本部認証が必要です。</p>' +
+      '<button class="btn danger" data-act="dispose"' + (c.loading || c.error ? ' disabled' : '') + '>' + I.clipboard + '廃棄する（本部専用）</button></div>';
+  }
 
   html += '<h2 class="sec">履歴</h2>';
   if (!c.history) html += c.loading ? '<div class="loading"><span class="spinner sm"></span>読み込み中…</div>' : '';
@@ -1434,6 +1486,10 @@ async function quickSave(type) {
 screens.form = function (p) {
   var d = st.cur && st.cur.serial === p.serial ? st.cur.device : null;
   if (p.type !== 'new' && !d) { back(); return; }
+  if ((p.type === 'dispose' || (d && d.status === '廃棄')) && !isHeadOffice()) {
+    go('headOffice', { returnSerial: p.serial, returnForm: p }, { replace: true }); return;
+  }
+  if (p.type === 'dispose' && (!disposalStatus() || d.status === '廃棄')) { back(); return; }
   if (!st.form || st.form.serial !== p.serial || st.form.type !== p.type || st.form.key !== p.key) st.form = initForm(p, d);
   paintForm();
 };
@@ -1449,6 +1505,7 @@ function initForm(p, d) {
   if (p.type === 'report') f.status = statusByKind('故障') || f.status;
   if (p.type === 'move') { f.location = ''; f.moveState = (kindOf(d.status) === '正常' || kindOf(d.status) === '') ? 'installed' : 'keep'; }
   if (p.type === 'new') f.status = normal;
+  if (p.type === 'dispose') f.status = disposalStatus();
   return f;
 }
 
@@ -1467,10 +1524,14 @@ function chipGroup(name, options, selected, multi, statusStyle, cls) {
 function paintForm() {
   var F = st.form;
   var d = F.current;
-  var titles = { report: '故障・不具合の報告', move: '別の場所へ移動', status: '状態・メモの変更', new: '端末の新規登録' };
+  var titles = { report: '故障・不具合の報告', move: '別の場所へ移動', status: '状態・メモの変更', new: '端末の新規登録', dispose: '本部確認・廃棄' };
   var html = '<div class="card" style="padding:12px 16px"><div class="serial" style="font-size:21px;margin:0">' + esc(F.serial) + '</div>' +
     (d ? '<div class="li-sub">' + esc(d.location) + (d.spot ? '・' + esc(d.spot) : '') + '　' + badge(d.status) + '</div>' : '') + '</div>';
   var showSymptoms = F.type === 'report' || ((F.type === 'status' || F.type === 'new') && kindOf(F.status) === '故障');
+  if (F.type === 'dispose') {
+    html += '<div class="note warn">' + I.alert + '<div><b>本部で確認し、廃棄が確定した端末に使います。</b><br>台帳・履歴・元の故障症状は残ります。棚卸と長期未確認の対象から外れます。契約の解約手続きは別途必要です。</div></div>' +
+      (d.symptom ? '<div class="card"><div class="label">報告されている症状</div><p class="body">' + esc(d.symptom) + '</p></div>' : '');
+  }
 
   if (F.type === 'new') {
     if (!patternOk(F.serial)) html += '<div class="note warn">' + I.alert + '<div>いつもの番号の形と違います。黄色いシールの番号と同じか確認してください。</div></div>';
@@ -1488,7 +1549,7 @@ function paintForm() {
   }
   if (F.type === 'status' || F.type === 'new') {
     html += '<div class="field"><span class="label">状態</span>' +
-      chipGroup('fStatus', st.boot.statuses.map(function (s) { return { value: s.name, label: s.name, sub: F.type === 'status' ? s.desc : '' }; }), F.status, false, true) + '</div>';
+      chipGroup('fStatus', st.boot.statuses.filter(function (s) { return s.name !== '廃棄' || (d && d.status === '廃棄' && F.type === 'status'); }).map(function (s) { return { value: s.name, label: s.name, sub: F.type === 'status' ? s.desc : '' }; }), F.status, false, true) + '</div>';
   }
   if (showSymptoms) {
     html += '<div class="field"><span class="label">症状（当てはまるものをすべて）</span>' + chipGroup('fSym', st.boot.symptoms, F.symptoms, true) + '</div>';
@@ -1496,7 +1557,7 @@ function paintForm() {
   if (F.type === 'status') {
     html += '<div class="field"><span class="label">設置場所</span>' + pickerHtml(F.location) + '</div>';
   }
-  if (F.type !== 'report' && st.boot.spots.length) {
+  if (F.type !== 'report' && F.type !== 'dispose' && st.boot.spots.length) {
     html += '<div class="field"><span class="label">設置個所' + (F.type === 'move' ? '（移動先での置き場所）' : '') + '</span>' + chipGroup('fSpot', st.boot.spots, F.spot, false) + '</div>';
   }
   if (F.type === 'new') {
@@ -1507,15 +1568,15 @@ function paintForm() {
   if (F.type === 'status' || F.type === 'new') {
     html += '<label class="field"><span>端末のメモ（いつも表示されます）</span><textarea id="fMemo" maxlength="500" placeholder="例：受付の上に設置">' + esc(F.memo) + '</textarea></label>';
   }
-  html += '<label class="field"><span>' + (F.type === 'report' ? '詳しい様子（任意）' : 'コメント（任意）') + '</span><textarea id="fComment" maxlength="500" placeholder="' +
-    (F.type === 'report' ? '例：朝から画面が真っ暗。電源ランプは点灯している' : '例：改装のため移動') + '">' + esc(F.comment) + '</textarea></label>';
+  html += '<label class="field"><span>' + (F.type === 'dispose' ? '本部での確認結果・廃棄理由（必須）' : F.type === 'report' ? '詳しい様子（任意）' : 'コメント（任意）') + '</span><textarea id="fComment" maxlength="' + (F.type === 'dispose' ? '400' : '500') + '" placeholder="' +
+    (F.type === 'dispose' ? '例：本部で電源・配線を確認。基板故障で修理不可のため廃棄' : F.type === 'report' ? '例：朝から画面が真っ暗。電源ランプは点灯している' : '例：改装のため移動') + '">' + esc(F.comment) + '</textarea></label>';
   if (F.type === 'report' || F.type === 'status' || F.type === 'new') {
     html += '<div class="field"><span class="label">写真（任意・3枚まで）</span><div class="photos">' +
       F.photos.map(function (src, i) { return '<div class="thumb"><img src="' + src + '" alt="添付写真' + (i + 1) + '"><button type="button" data-act="rmPhoto" data-i="' + i + '" aria-label="写真を削除">×</button></div>'; }).join('') +
       (F.photos.length < 3 ? '<label class="thumb add" for="photoInput">' + I.camera + '<span>撮影する</span></label><label class="thumb add" for="photoPick">' + I.image + '<span>アルバム</span></label>' : '') +
       '</div></div>';
   }
-  var submit = { report: ['danger', '故障・不具合を報告する'], move: ['primary', '移動を記録する'], status: ['primary', '保存する'], new: ['primary', 'この端末を登録する'] }[F.type];
+  var submit = { report: ['danger', '故障・不具合を報告する'], move: ['primary', '移動を記録する'], status: ['primary', '保存する'], new: ['primary', 'この端末を登録する'], dispose: ['danger', '確認して廃棄を記録する'] }[F.type];
   html += '<div class="sticky-actions"><button class="btn ' + submit[0] + '" data-act="submit">' + esc(submit[1]) + '</button></div>';
   setView(html, titles[F.type]);
 
@@ -1552,6 +1613,12 @@ function pickerHtml(value) {
 async function submitForm() {
   var F = st.form;
   var d = F.current;
+  if (F.type === 'dispose') {
+    if (!isHeadOffice()) { go('headOffice', { returnSerial: F.serial, returnForm: topParams() }); return; }
+    if (!F.comment.trim()) { toast('本部での確認結果・廃棄理由を入力してください'); return; }
+    if (!disposalStatus() || !d || d.status === '廃棄') { toast('最新の状態を確認してください'); return; }
+    if (!(await confirmModal('廃棄として記録しますか？', F.serial + '\n' + d.location + '\n\n' + d.status + ' → 廃棄\n理由：' + F.comment.trim() + '\n\n台帳・履歴は残ります。契約の解約は別途確認してください。', '廃棄を確定する', true))) return;
+  }
   if ((F.type === 'new' || F.type === 'move') && !F.location) { toast(F.type === 'move' ? '移動先を選んでください' : '設置場所を選んでください'); globalActsPick(); return; }
   if (F.type === 'report' && !F.symptoms.length && !F.comment.trim()) { toast('症状を選ぶか、様子を書いてください'); return; }
   if (F.type === 'move' && d && normKey(F.location) === normKey(d.location) && F.moveState === 'keep' && F.spot === d.spot) { toast('今と同じ場所です'); return; }
@@ -1565,6 +1632,7 @@ async function submitForm() {
     p = Object.assign(base, { mode: 'new', location: F.location, spot: F.spot, status: F.status, symptoms: kindOf(F.status) === '故障' ? F.symptoms : [], model: F.model.trim(), deviceMemo: F.memo.trim() });
   } else {
     p = Object.assign(base, { mode: 'update', baseRev: F.baseRev });
+    if (F.type === 'dispose') Object.assign(p, { kind: 'dispose', status: disposalStatus(), comment: '本部確認・廃棄理由：' + F.comment.trim() });
     if (F.type === 'report') Object.assign(p, { kind: 'report', status: statusByKind('故障') || d.status, symptoms: F.symptoms });
     if (F.type === 'move') {
       var target = { installed: normalStatus(), transit: statusByKind('移動'), stored: statusByKind('保管'), keep: d.status }[F.moveState] || d.status;
@@ -1729,6 +1797,12 @@ function invAdd(raw, silent) {
     res = { kind: 'dup', s: s, text: s + '：読み取り済みです' };
   } else {
     var d = st.devices.get(s);
+    if (d && kindOf(d.st) === '終了') {
+      res = { kind: 'bad', s: s, text: s + '：「' + d.st + '」のため棚卸に追加しません。本部に確認してください。' };
+      st.inv.last = res; saveInv(); feedback('warn');
+      if (topName() === 'inv') render(); else if (!silent) toast(res.text);
+      return res;
+    }
     var kind = !d ? 'new' : (normKey(d.l) !== normKey(st.inv.location) ? 'moved' : 'ok');
     st.inv.items.unshift({ s: s, t: Date.now(), kind: kind });
     res = { kind: kind, s: s, text: kind === 'ok' ? s + '：OK' : kind === 'new' ? s + '：台帳にない端末' : s + '：台帳では「' + d.l + '」' };
@@ -1886,6 +1960,31 @@ screens.invDone = function () {
 /* =========================================================
  * 画面：設定
  * ========================================================= */
+screens.headOffice = function (p) {
+  setView('<div class="card"><h2 style="margin-top:0">本部専用の認証</h2><p class="body">廃棄の確定・廃棄済み端末の変更には、本部用の合言葉が必要です。通常の店舗用合言葉とは別です。</p>' +
+    (p.message ? '<p class="hint warn-text">' + esc(p.message) + '</p>' : '') +
+    '<form id="hqForm"><label class="field"><span>本部用の合言葉</span><input id="hqPass" type="password" autocomplete="off" required></label>' +
+    '<button type="submit" class="btn primary">本部として認証する</button></form>' +
+    '<p class="hint">認証は最大8時間有効です。作業後は設定から「本部認証を終了する」を押してください。</p></div>', '本部認証');
+  $('#hqForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var pass = $('#hqPass').value;
+    if (!pass.trim()) return;
+    $('#hqPass').value = '';
+    var result;
+    try { result = await run(function () { return api('loginHeadOffice', { passcode: pass }); }, '本部認証を確認しています…'); }
+    catch (err) { pass = ''; return; }
+    pass = '';
+    setHeadOfficeSession(result.hqToken, result.expiresAt);
+    try { await run(loadBoot, '最新の情報を読み込んでいます…'); } catch (err) { return; }
+    if (!isHeadOffice()) { alertModal('認証を確認できませんでした', '時間をおいて、もう一度本部認証を行ってください。'); return; }
+    if (p.returnForm) go('form', p.returnForm, { replace: true });
+    else if (p.returnSerial) { back(); openSerial(p.returnSerial); }
+    else go('settings', {}, { replace: true });
+    toast('本部として認証しました');
+  });
+};
+
 function isIosSafariLike() {
   var ua = navigator.userAgent || '';
   return /iP(hone|ad|od)/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -1917,12 +2016,16 @@ screens.settings = function () {
     modes.map(function (m) { return '<button class="chip" data-act="mode" data-v="' + m.value + '" aria-pressed="' + (st.scanMode === m.value) + '"><span>' + esc(m.label) + '<small>' + esc(m.sub) + '</small></span></button>'; }).join('') +
     '</div><p class="hint" style="margin-bottom:0">いまの方法：' + (scanMode() === 'live' ? 'かざして読み取る' : '撮影して読み取る') + (Decoder.engine ? '（' + esc(Decoder.engine) + '）' : '') + '</p></div>' +
     installCardHtml() +
+    '<div class="card"><div class="label">本部専用の操作</div><p class="hint">廃棄の確定・廃棄済み端末の変更には本部認証が必要です。</p>' +
+    (isHeadOffice() ? '<p class="hint">本部認証中（' + esc(fmtDate(st.hqExpiresAt)) + 'まで）</p><button class="btn" data-act="hqLogout">本部認証を終了する</button>' : '<button class="btn" data-act="hqLogin">本部として認証する</button>') + '</div>' +
     '<div class="stack"><button class="btn" data-act="refresh">' + I.refresh + '最新の情報にする</button>' +
     '<button class="btn" data-act="testScan">' + I.camera + '読み取り機能を準備・確認する</button>' +
     '<button class="btn ghost" data-act="logout">合言葉を入力し直す（ログアウト）</button></div>' +
     '<p class="foot">バージョン ' + APP_VERSION + '・接続：' + ({ gas: 'Googleスプレッドシート', web: 'Googleスプレッドシート', mock: 'デモ（保存されません）' }[MODE] || MODE) +
     '<br>この端末のID：' + esc(st.deviceId.slice(0, 8)) + '・' + esc(deviceLabel()) + '</p>';
   setView(html, '設定');
+  acts.hqLogin = function () { go('headOffice', {}); };
+  acts.hqLogout = function () { setHeadOfficeSession('', 0); render(); toast('本部認証を終了しました'); };
   acts.mode = function (el) { st.scanMode = el.getAttribute('data-v'); st.liveFailed = false; store.set('scanMode', st.scanMode); render(); };
   acts.rename = function () {
     openModal('<h3>お名前の変更</h3><form id="nameForm"><input id="newName" type="text" maxlength="20" value="' + esc(st.user) + '" data-autofocus>' +
@@ -1950,6 +2053,7 @@ screens.settings = function () {
   };
   acts.logout = async function () {
     if (!(await confirmModal('ログアウトしますか？', '次に開くときに合言葉の入力が必要になります。', 'ログアウト'))) return;
+    setHeadOfficeSession('', 0);
     st.token = ''; store.del('token');
     go('login', {}, { root: true });
   };
