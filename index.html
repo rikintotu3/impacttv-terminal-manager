@@ -299,7 +299,7 @@ var CONFIG = Object.assign({
   FORCE_POLYFILL: false
 }, window.ITV_CONFIG || {});
 
-var APP_VERSION = '2.0.0';
+var APP_VERSION = '2.0.1';
 var IS_GAS = !!(window.google && google.script && google.script.run);
 var MODE = IS_GAS ? 'gas' : (CONFIG.API_URL ? 'web' : (window.__MOCK_API__ ? 'mock' : 'none'));
 var SERIAL_RE = /^[A-Z0-9\-_.\/+]{1,40}$/;
@@ -1133,7 +1133,7 @@ screens.error = function (p) {
   setView('<div class="note danger">' + I.alert + '<div><b>' + esc(p.title || '読み込めませんでした') + '</b><br>' + esc(p.message || '') + '</div></div>' +
     '<div class="stack"><button class="btn primary" data-act="retry">' + I.refresh + 'もう一度読み込む</button>' +
     '<button class="btn" data-act="relogin">合言葉を入力し直す</button></div>', appName());
-  acts.retry = function () { start(); };
+  acts.retry = function () { if (p.reload) location.reload(); else start(); };
   acts.relogin = function () { st.token = ''; store.del('token'); go('login', {}, { root: true }); };
 };
 
@@ -1464,7 +1464,7 @@ function paintForm() {
   var titles = { report: '故障・不具合の報告', move: '別の場所へ移動', status: '状態・メモの変更', new: '端末の新規登録' };
   var html = '<div class="card" style="padding:12px 16px"><div class="serial" style="font-size:21px;margin:0">' + esc(F.serial) + '</div>' +
     (d ? '<div class="li-sub">' + esc(d.location) + (d.spot ? '・' + esc(d.spot) : '') + '　' + badge(d.status) + '</div>' : '') + '</div>';
-  var showSymptoms = F.type === 'report' || (F.type === 'status' && kindOf(F.status) === '故障');
+  var showSymptoms = F.type === 'report' || ((F.type === 'status' || F.type === 'new') && kindOf(F.status) === '故障');
 
   if (F.type === 'new') {
     if (!patternOk(F.serial)) html += '<div class="note warn">' + I.alert + '<div>いつもの番号の形と違います。黄色いシールの番号と同じか確認してください。</div></div>';
@@ -1914,7 +1914,7 @@ screens.settings = function () {
     '<div class="stack"><button class="btn" data-act="refresh">' + I.refresh + '最新の情報にする</button>' +
     '<button class="btn" data-act="testScan">' + I.camera + '読み取り機能を準備・確認する</button>' +
     '<button class="btn ghost" data-act="logout">合言葉を入力し直す（ログアウト）</button></div>' +
-    '<p class="foot">バージョン ' + APP_VERSION + '・接続：' + ({ gas: 'Googleスプレッドシート', web: '外部ページ', mock: 'お試し' }[MODE] || MODE) +
+    '<p class="foot">バージョン ' + APP_VERSION + '・接続：' + ({ gas: 'Googleスプレッドシート', web: 'Googleスプレッドシート', mock: 'デモ（保存されません）' }[MODE] || MODE) +
     '<br>この端末のID：' + esc(st.deviceId.slice(0, 8)) + '・' + esc(deviceLabel()) + '</p>';
   setView(html, '設定');
   acts.mode = function (el) { st.scanMode = el.getAttribute('data-v'); st.liveFailed = false; store.set('scanMode', st.scanMode); render(); };
@@ -2019,6 +2019,10 @@ function loadDemo() {
 }
 
 async function start() {
+  if (!IS_GAS && (!window.ITV_CONFIG || typeof window.ITV_CONFIG.API_URL !== 'string')) {
+    go('error', { title: '接続設定を読み込めませんでした', message: '通信状態を確認して、もう一度読み込んでください。設定を確認できるまで登録はできません。', reload: true }, { root: true });
+    return;
+  }
   if (MODE === 'none') {
     var demoOk = await loadDemo();
     if (demoOk) {
