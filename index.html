@@ -299,7 +299,7 @@ var CONFIG = Object.assign({
   FORCE_POLYFILL: false
 }, window.ITV_CONFIG || {});
 
-var APP_VERSION = '2.2.0';
+var APP_VERSION = '2.2.1';
 var IS_GAS = !!(window.google && google.script && google.script.run);
 var MODE = IS_GAS ? 'gas' : (CONFIG.API_URL ? 'web' : (window.__MOCK_API__ ? 'mock' : 'none'));
 var SERIAL_RE = /^[A-Z0-9\-_.\/+]{1,40}$/;
@@ -440,24 +440,94 @@ function deviceLabel() {
  * ========================================================= */
 function AppError(code, message, extra) { var e = new Error(message); e.code = code; e.extra = extra; return e; }
 
+var API_TIMEOUT_MS = 25000;
+var API_RETRY_MS = 700;
+function apiCommunicationError(code, action, status, retryable, detail) {
+  var updating = ['saveDevice', 'undo', 'inventoryCommit'].indexOf(action) >= 0;
+  var label = { login: 'LOGIN', bootstrap: 'BOOT', getDevice: 'DEVICE', saveDevice: 'SAVE', undo: 'UNDO', inventoryCommit: 'INVENTORY', loginHeadOffice: 'HQ' }[action] || 'REQUEST';
+  // 診断情報は固定の種別・操作名・HTTP番号のみ。本文や認証情報は保持しない。
+  var diagnostic = 'ITV-' + label + '-' + code + (status ? '-' + status : '') + (detail ? '-' + detail : '');
+  var message = updating
+    ? '処理結果を確認できませんでした。すでに保存・反映されている可能性があります。再送する前に、通信状態を確認し、対象端末の最新状態・履歴を開いて結果を確認してください。確認できない場合は本部へ連絡してください。'
+    : '通信状態を確認し、少し待ってからもう一度お試しください。改善しない場合は、この画面を開き直してください。それでも続く場合は、診断コードを本部へ伝えてください。';
+  if (!updating && code === 'TIMEOUT') message = '応答を待つ時間が上限に達しました。' + message;
+  else if (!updating && code === 'HTTP') message = '接続先で通信エラーが発生しました。' + message;
+  else if (!updating && code === 'RESPONSE') message = '接続先から正しい形式の応答を受け取れませんでした。' + message;
+  else if (!updating && code === 'SERVER') message = 'サーバーで処理を完了できませんでした。' + message;
+  var error = AppError(updating ? 'RESULT_UNKNOWN' : code, message + '\n診断コード：' + diagnostic);
+  error.retryable = !!retryable;
+  error.diagnostic = diagnostic;
+  return error;
+}
+function validApiData(action, data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+  if (action === 'login') return typeof data.token === 'string' && data.token.length > 0;
+  if (action === 'bootstrap') return !!(data.settings && typeof data.settings === 'object' && !Array.isArray(data.settings) && Array.isArray(data.devices) && Array.isArray(data.statuses));
+  if (action === 'getDevice') return (data.device === null || !!(data.device && typeof data.device === 'object' && !Array.isArray(data.device))) && Array.isArray(data.history);
+  return true;
+}
 function api(action, payload) {
   var req = { action: action, payload: payload || {}, token: st.token, hqToken: st.hqToken || '', user: st.user, device: { id: st.deviceId, label: deviceLabel() }, v: APP_VERSION };
-  return new Promise(function (resolve, reject) {
-    function done(res) {
-      if (typeof res === 'string') { try { res = JSON.parse(res); } catch (e) { res = null; } }
-      if (!res || typeof res !== 'object') return reject(AppError('SERVER', 'サーバーから正しい応答がありませんでした。時間をおいて試してください。'));
-      if (res.ok) return resolve(res.data);
-      reject(AppError(res.code || 'SERVER', res.message || 'エラーが発生しました。', res.extra));
-    }
-    function fail(err) {
-      reject(AppError('NETWORK', '電波の良い場所で、もう一度お試しください。', String(err && err.message || err)));
-    }
-    try {
-      if (MODE === 'gas') google.script.run.withSuccessHandler(done).withFailureHandler(fail).api(req);
-      else if (MODE === 'web') fetch(CONFIG.API_URL, { method: 'POST', body: JSON.stringify(req), redirect: 'follow' }).then(function (r) { return r.text(); }).then(done, fail);
-      else if (MODE === 'mock') Promise.resolve(window.__MOCK_API__(req)).then(done, fail);
-      else reject(AppError('CONFIG', '接続先が設定されていません（CONFIG.API_URL）。'));
-    } catch (e) { fail(e); }
+  function attempt() {
+    return new Promise(function (resolve, reject) {
+      var settled = false;
+      var controller = MODE === 'web' && typeof AbortController !== 'undefined' ? new AbortController() : null;
+      var timer = setTimeout(function () {
+        finish(apiCommunicationError('TIMEOUT', action, 0, true));
+        if (controller) controller.abort();
+      }, API_TIMEOUT_MS);
+      function finish(error, data) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (error) reject(error); else resolve(data);
+      }
+      function done(res, status) {
+        if (settled) return;
+        if (typeof res === 'string') {
+          try { res = JSON.parse(res); }
+          catch (error) { finish(apiCommunicationError('RESPONSE', action, status, MODE === 'web' && status === 200, 'NONJSON')); return; }
+        }
+        if (!res || typeof res !== 'object' || Array.isArray(res) || typeof res.ok !== 'boolean') {
+          finish(apiCommunicationError('RESPONSE', action, status, false, 'SHAPE')); return;
+        }
+        if (res.ok === true) {
+          if (!validApiData(action, res.data)) { finish(apiCommunicationError('RESPONSE', action, status, false, 'DATA')); return; }
+          finish(null, res.data); return;
+        }
+        // 認証失敗や業務エラーは、通信の一時障害として再送しない。
+        var code = typeof res.code === 'string' && /^[A-Z_]{2,40}$/.test(res.code) ? res.code : 'SERVER';
+        if (code === 'SERVER') { finish(apiCommunicationError('SERVER', action, status, false)); return; }
+        finish(AppError(code, typeof res.message === 'string' ? res.message : '処理を完了できませんでした。', res.extra));
+      }
+      function fail() {
+        // fetch の例外本文には接続先等が含まれることがあるため保存しない。
+        finish(apiCommunicationError('NETWORK', action, 0, true));
+      }
+      try {
+        if (MODE === 'gas') google.script.run.withSuccessHandler(function (res) { done(res); }).withFailureHandler(fail).api(req);
+        else if (MODE === 'web') {
+          var options = { method: 'POST', body: JSON.stringify(req), redirect: 'follow', credentials: 'omit', cache: 'no-store' };
+          if (controller) options.signal = controller.signal;
+          fetch(CONFIG.API_URL, options).then(function (response) {
+            if (settled) return;
+            if (!response.ok) {
+              var status = response.status;
+              finish(apiCommunicationError('HTTP', action, status, status === 408 || status === 429 || (status >= 500 && status <= 599)));
+              return;
+            }
+            return response.text().then(function (text) { done(text, response.status); });
+          }).catch(fail);
+        } else if (MODE === 'mock') Promise.resolve(window.__MOCK_API__(req)).then(function (res) { done(res); }, fail);
+        else finish(AppError('CONFIG', '接続先が設定されていません（CONFIG.API_URL）。'));
+      } catch (error) { fail(); }
+    });
+  }
+  return attempt().catch(function (error) {
+    var mayRetry = MODE === 'web' && ['login', 'bootstrap', 'getDevice'].indexOf(action) >= 0;
+    if (!mayRetry || !error.retryable) throw error;
+    // 更新処理は自動再送しない。読み取り・店舗ログインのみ最大1回。
+    return sleep(API_RETRY_MS).then(attempt);
   });
 }
 
@@ -479,6 +549,7 @@ async function run(fn, busyText) {
 
 var ERROR_TITLES = {
   NETWORK: '通信できませんでした', BAD_PASS: '合言葉が違います', LOCKED: 'しばらくお待ちください', BUSY: '混み合っています',
+  TIMEOUT: '応答を確認できませんでした', HTTP: '接続先で通信エラーが発生しました', RESPONSE: '応答を確認できませんでした', SERVER: 'サーバーで処理を完了できませんでした', RESULT_UNKNOWN: '処理結果の確認が必要です',
   DUPLICATE_ROWS: '台帳に同じ番号が複数あります', UNDO_EXPIRED: '取り消せません', UNDO_NOT_FOUND: '取り消せません',
   BAD_LOCATION: '設置場所を確認してください', BAD_STATUS: '状態を確認してください', BAD_SERIAL: '番号を確認してください',
   SETUP: '初期設定が必要です', BAD_PHOTO: '写真を送れませんでした', CONFIG: '設定が必要です',
@@ -1152,18 +1223,28 @@ screens.login = function (p) {
       '<button class="btn primary" type="submit">はじめる</button>' +
     '</form>', 'ようこそ');
   var form = $('#loginForm');
+  var submitting = false;
+  var passInput = needPass ? $('#inPass') : null;
   setTimeout(function () { var f = needPass ? $('#inPass') : $('#inName'); if (f && !f.value) f.focus(); }, 80);
   form.addEventListener('submit', async function (e) {
     e.preventDefault();
+    if (submitting) return;
     var name = $('#inName').value.trim();
-    if (needPass && !$('#inPass').value.trim()) { toast('合言葉を入力してください'); $('#inPass').focus(); return; }
+    if (!st.token && passInput && !passInput.value.trim()) { toast('合言葉を入力してください'); passInput.focus(); return; }
     if (!name) { toast('お名前を入力してください'); $('#inName').focus(); return; }
+    submitting = true;
+    var submitButton = form.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
     st.user = name;
     store.set('user', name);
     try {
-      if (needPass) await run(function () { return login($('#inPass').value); }, '合言葉を確認しています…');
+      if (!st.token) {
+        await run(function () { return login(passInput ? passInput.value : ''); }, '合言葉を確認しています…');
+        if (passInput) passInput.value = '';
+      }
       await run(loadBoot, '読み込み中…');
     } catch (err) { return; }
+    finally { submitting = false; submitButton.disabled = false; }
     go('home', null, { root: true });
     Decoder.ready().catch(function () {});
   });

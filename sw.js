@@ -1,7 +1,7 @@
 /* impactTV 端末管理 — Service Worker
  * GET のみ対象。API（POST）は素通し。
  * 設定と画面: network-first / CDN: stale-while-revalidate / 静的資産: cache-first */
-const VERSION = 'itv-v2.2.0';
+const VERSION = 'itv-v2.2.1';
 const PRECACHE = [
   './',
   'index.html',
