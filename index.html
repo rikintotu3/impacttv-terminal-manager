@@ -1552,7 +1552,7 @@ function paintDevice() {
   else {
     html += '<ul class="card hist">' + c.history.map(function (h) {
       var change = [];
-      if (h.st0 && h.st1 && h.st0 !== h.st1) change.push(h.st0 + ' → ' + h.st1);
+      if (h.st0 && h.st1 && h.st0 !== h.st1) change.push(statusLabel(h.st0) + ' → ' + statusLabel(h.st1));
       if (h.l0 && h.l1 && h.l0 !== h.l1) change.push(h.l0 + ' → ' + h.l1);
       return '<li class="' + (h.undone ? 'undone' : '') + '"><div class="h-top"><span>' + esc(h.op) + '</span><span class="h-sub">' + esc(fmtDate(h.t)) + '</span></div>' +
         '<div class="h-sub">' + esc(h.u) + (change.length ? '・' + esc(change.join('／')) : '') + '</div>' +
@@ -1714,7 +1714,7 @@ async function submitForm() {
     if (!isHeadOffice()) { go('headOffice', { returnSerial: F.serial, returnForm: topParams() }); return; }
     if (!F.comment.trim()) { toast('本部での確認結果・廃棄理由を入力してください'); return; }
     if (!disposalStatus() || !d || d.status === '廃棄') { toast('最新の状態を確認してください'); return; }
-    if (!(await confirmModal('廃棄を記録しますか？', F.serial + '\n' + d.location + '\n\n' + d.status + ' → 廃棄\n理由：' + F.comment.trim() + '\n\n契約の解約は別途手続きしてください。', '廃棄を記録する', true))) return;
+    if (!(await confirmModal('廃棄を記録しますか？', F.serial + '\n' + d.location + '\n\n理由：' + F.comment.trim() + '\n\n契約の解約は別途手続きしてください。', '廃棄を記録する', true))) return;
   }
   if ((F.type === 'new' || F.type === 'move') && !F.location) { toast(F.type === 'move' ? '移動先を選んでください' : '設置場所を選んでください'); globalActsPick(); return; }
   if (F.type === 'report' && !F.symptoms.length && !F.comment.trim()) { toast('症状を選ぶか、様子を書いてください'); return; }
@@ -1759,7 +1759,7 @@ async function submitSave(payload, F) {
     var last = r.last;
     openModal('<h3>ほかの人が先に更新しました</h3><p class="body">' +
       (last ? esc(last.u) + 'さんが「' + esc(last.op) + '」を保存しました（' + esc(ago(last.t)) + '）。\n' : '') +
-      'いまの状態：' + esc(r.device.status) + '／' + esc(r.device.location) + '</p><div class="stack">' +
+      'いまの状態：' + esc(statusLabel(r.device.status)) + '／' + esc(r.device.location) + '</p><div class="stack">' +
       '<button class="btn primary" data-act="latest">最新の状態を見る</button>' +
       (F ? '<button class="btn" data-act="force">内容を確認して、このまま保存する</button>' : '') +
       '<button class="btn ghost" data-act="close">閉じる</button></div>',
@@ -1895,7 +1895,7 @@ function invAdd(raw, silent) {
   } else {
     var d = st.devices.get(s);
     if (d && kindOf(d.st) === '終了') {
-      res = { kind: 'bad', s: s, text: s + '：「' + d.st + '」のため棚卸に追加しません。本部に確認してください。' };
+      res = { kind: 'bad', s: s, text: s + '：利用が終了した端末は棚卸に追加しません。本部に確認してください。' };
       st.inv.last = res; saveInv(); feedback('warn');
       if (topName() === 'inv') render(); else if (!silent) toast(res.text);
       return res;
@@ -2014,10 +2014,10 @@ screens.invDone = function () {
   html += block('reg', '台帳にない端末', news, 'この場所の端末として登録する（' + esc(normalStatus()) + '）', 'new',
     function (s) { return '<span class="mono">' + esc(s) + '</span>' + (patternOk(s) ? '' : ' <b class="warn-text">形式が違います</b>'); });
   html += block('revive', '移動中・所在不明になっていた端末', revive, esc(normalStatus()) + 'に戻す', 'ok',
-    function (d) { return '<span class="mono">' + esc(d.s) + '</span>（' + esc(d.st) + '）'; });
+    function (d) { return '<span class="mono">' + esc(d.s) + '</span>（' + esc(statusLabel(d.st)) + '）'; });
   if (lost) {
     html += block('missing', '見つからなかった端末', missing, '「' + esc(lost) + '」にする（本当に無いときだけ）', 'bad',
-      function (d) { return '<span class="mono">' + esc(d.s) + '</span>（' + esc(d.st) + (d.p ? '・' + esc(d.p) : '') + '）'; });
+      function (d) { return '<span class="mono">' + esc(d.s) + '</span>（' + esc(statusLabel(d.st)) + (d.p ? '・' + esc(d.p) : '') + '）'; });
   }
   if (!moved.length && !news.length && !missing.length) html += '<div class="note ok">' + I.check + '<div>台帳との違いはありません。</div></div>';
   html += '<div class="sticky-actions"><div class="stack"><button class="btn okb" data-act="commit">' + I.check + 'この内容で棚卸を確定する</button>' +
