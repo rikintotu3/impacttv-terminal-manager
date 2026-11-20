@@ -121,6 +121,13 @@ button.li{padding:10px 14px;width:100%;border-bottom:1px solid var(--line)}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:12px 0 0;font-size:15px}
 .kv dt{color:var(--muted);font-size:13px;padding-top:2px}
 .kv dd{margin:0;word-break:break-word}
+.device-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0 0;padding:12px 0;border-block:1px solid var(--line)}
+.device-summary dt{font-size:13px;color:var(--sub)}
+.device-summary dd{margin:4px 0 0;font-weight:700;overflow-wrap:anywhere}
+.device-summary .pill{font-size:15px;padding:3px 12px;max-width:100%}
+.end-actions{margin-top:12px}
+.end-actions summary{min-height:44px;align-content:center;font-size:14px;font-weight:700;color:var(--sub);cursor:pointer}
+.end-actions .hint{margin-top:0}
 .place{font-size:18px;font-weight:700;margin:10px 0 0;display:flex;gap:6px;align-items:flex-start}
 .place .i{margin-top:3px;color:var(--muted)}
 .hist{padding:0}
@@ -299,7 +306,7 @@ var CONFIG = Object.assign({
   FORCE_POLYFILL: false
 }, window.ITV_CONFIG || {});
 
-var APP_VERSION = '2.2.1';
+var APP_VERSION = '2.2.2';
 var IS_GAS = !!(window.google && google.script && google.script.run);
 var MODE = IS_GAS ? 'gas' : (CONFIG.API_URL ? 'web' : (window.__MOCK_API__ ? 'mock' : 'none'));
 var SERIAL_RE = /^[A-Z0-9\-_.\/+]{1,40}$/;
@@ -594,8 +601,9 @@ function statusInfo(name) { return st.statusMap.get(name) || { name: name || '�
 function kindOf(name) { return statusInfo(name).kind; }
 function statusByKind(kind) { var s = st.boot.statuses.filter(function (x) { return x.kind === kind; })[0]; return s ? s.name : null; }
 function normalStatus() { return statusByKind('正常') || st.boot.statuses[0].name; }
-function badge(name) { var s = statusInfo(name); return '<span class="badge" style="--c:' + esc(s.color) + '"><i></i>' + esc(s.name) + '</span>'; }
-function pill(name) { var s = statusInfo(name); return '<span class="pill" style="--c:' + esc(s.color) + '">' + esc(s.name) + '</span>'; }
+function statusLabel(name) { return name === '解約・返却' ? '利用終了' : (name || '（未設定）'); }
+function badge(name) { var s = statusInfo(name); return '<span class="badge" style="--c:' + esc(s.color) + '"><i></i>' + esc(statusLabel(s.name)) + '</span>'; }
+function pill(name) { var s = statusInfo(name); return '<span class="pill" style="--c:' + esc(s.color) + '">' + esc(statusLabel(s.name)) + '</span>'; }
 function staleMs() { return st.boot.settings.staleDays * 86400000; }
 function isStale(c) { return kindOf(c.st) !== '終了' && (!c.ck || Date.now() - c.ck > staleMs()); }
 function inferModel(serial) {
@@ -1290,7 +1298,7 @@ screens.home = function () {
   html += '<h2 class="sec">いまの状況<small>全' + st.devices.size + '台</small></h2><div class="stats">';
   b.statuses.forEach(function (s) {
     var n = counts[s.name] || 0;
-    html += '<button class="stat' + (n ? '' : ' zero') + '" data-act="listStatus" data-status="' + esc(s.name) + '" style="--c:' + esc(s.color) + '"><i></i><span>' + esc(s.name) + '</span><b>' + n + '</b></button>';
+    html += '<button class="stat' + (n ? '' : ' zero') + '" data-act="listStatus" data-status="' + esc(s.name) + '" style="--c:' + esc(s.color) + '"><i></i><span>' + esc(statusLabel(s.name)) + '</span><b>' + n + '</b></button>';
   });
   html += '<button class="stat' + (stale ? '' : ' zero') + '" data-act="listStale" style="--c:#b45309"><i></i><span>未確認・<br>長期未確認</span><b>' + stale + '</b></button></div>';
   html += recentOpsHtml();
@@ -1382,7 +1390,7 @@ screens.list = function (p) {
   });
   var chips = '<button class="chip" data-act="fStatus" data-v="" aria-pressed="' + (!f.status && !f.stale) + '">すべて</button>' +
     st.boot.statuses.map(function (s) {
-      return '<button class="chip status" style="--c:' + esc(s.color) + '" data-act="fStatus" data-v="' + esc(s.name) + '" aria-pressed="' + (f.status === s.name) + '"><i class="dot"></i>' + esc(s.name) + ' ' + (counts[s.name] || 0) + '</button>';
+      return '<button class="chip status" style="--c:' + esc(s.color) + '" data-act="fStatus" data-v="' + esc(s.name) + '" aria-pressed="' + (f.status === s.name) + '"><i class="dot"></i>' + esc(statusLabel(s.name)) + ' ' + (counts[s.name] || 0) + '</button>';
     }).join('') +
     '<button class="chip" data-act="fStale" aria-pressed="' + f.stale + '">未確認・長期未確認</button>';
   setView('<div class="search-row"><input type="search" id="listQ" placeholder="番号・店舗名で絞り込み" value="' + esc(f.q) + '" autocomplete="off"></div>' +
@@ -1486,51 +1494,56 @@ function paintDevice() {
   var info = statusInfo(d.status);
   var kind = info.kind;
   var normal = normalStatus();
+  var needsHeadOffice = d.status === '廃棄' && !isHeadOffice();
+  var contract = String(d.contract || '').trim();
   html += '<div class="card">' +
     '<div class="serial">' + esc(d.serial) + '</div>' +
-    pill(d.status) +
     '<div class="place">' + I.pin + '<span>' + esc(d.location || '（場所なし）') + (d.spot ? '<br><small style="font-weight:600;color:var(--muted)">' + esc(d.spot) + '</small>' : '') + '</span></div>' +
+    '<dl class="device-summary"><div><dt>端末の状態</dt><dd>' + pill(d.status) + '</dd></div>' +
+    '<div><dt>契約状況</dt><dd>' + (contract ? esc(contract) : '未記録') + '</dd></div></dl>' +
+    (kind === '終了' ? '<p class="hint">棚卸の対象外です。返却や解約の状況は別途確認してください。</p>' : '') +
     '<dl class="kv">' +
     (d.symptom ? '<dt>症状</dt><dd>' + esc(d.symptom) + '</dd>' : '') +
     (d.model ? '<dt>機種</dt><dd>' + esc(d.model) + '</dd>' : '') +
-    (d.contract && d.contract !== '契約中' ? '<dt>契約</dt><dd><b class="warn-text">' + esc(d.contract) + '</b></dd>' : '') +
     (d.memo && d.memo !== d.symptom ? '<dt>メモ</dt><dd>' + esc(d.memo) + '</dd>' : '') +
     '<dt>最終確認</dt><dd>' + (d.checkedAt ? esc(fmtDate(d.checkedAt)) + '（' + esc(d.checkedBy || '') + '）' : '<span class="warn-text">まだ読み取り確認されていません</span>') + '</dd>' +
     (d.updatedAt ? '<dt>最終更新</dt><dd>' + esc(fmtDate(d.updatedAt)) + '（' + esc(d.updatedBy || '') + '）</dd>' : '') +
     (d.photos && d.photos.length ? '<dt>写真</dt><dd>' + d.photos.map(function (u, i) { return '<a href="' + esc(u) + '" target="_blank" rel="noopener">写真' + (i + 1) + '</a>'; }).join('　') + '</dd>' : '') +
     '</dl>' +
-    (c.loading ? '<div class="loading"><span class="spinner sm"></span>最新の情報を確認中…</div>' : '') +
-    '</div>';
+    (c.loading ? '<div class="loading"><span class="spinner sm"></span>最新の情報を確認中…</div>' : '');
+  if (needsHeadOffice) {
+    html += '<div class="end-actions"><p class="hint">廃棄後の端末情報を変更するには、本部認証が必要です。</p>' +
+      '<button class="btn" data-act="headOffice">本部として認証する</button></div>';
+  } else if (kind !== '終了') {
+    html += '<details class="end-actions"><summary>利用終了の手続き</summary>' +
+      '<p class="hint">契約の解約は経理へ。端末の廃棄は本部で記録します。</p>' +
+      (disposalStatus() ? '<button class="btn danger" data-act="dispose"' + (c.loading || c.error ? ' disabled' : '') + '>' + I.clipboard + '廃棄を記録（本部専用）</button>' : '') +
+      '</details>';
+  }
+  html += '</div>';
 
   var reviveLabel = { '故障': '直った（' + normal + 'に戻す）', '修理': '修理から戻った（' + normal + 'にする）', '移動': 'ここに届いた（' + normal + 'にする）', '不明': '見つかった（' + normal + 'に戻す）', '保管': '使い始める（' + normal + 'にする）' }[kind];
   var banner = {
     '故障': ['danger', '故障・不具合として報告されています'],
     '修理': ['warn', '修理・交換に出している端末です'],
     '移動': ['info', '移動中の端末です（行き先：' + (d.location || '未設定') + '）'],
-    '不明': ['warn', '所在不明になっている端末です'],
-    '終了': ['warn', d.status === '廃棄' ? '本部で廃棄として記録した端末です。台帳・履歴は残り、棚卸の対象から外れます。契約の解約は別途確認してください。' : '解約・返却済みの端末です。店舗にある場合は本部に連絡してください。']
+    '不明': ['warn', '所在不明になっている端末です']
   }[kind];
   if (banner) html += '<div class="note ' + banner[0] + '">' + I.alert + '<div><b>' + esc(banner[1]) + '</b></div></div>';
   if (isStale({ st: d.status, ck: d.checkedAt }) && kind !== '終了' && d.checkedAt) {
     html += '<div class="note warn">' + I.alert + '<div>' + st.boot.settings.staleDays + '日以上、読み取り確認されていません。</div></div>';
   }
 
-  html += '<div class="stack">';
-  if (d.status !== '廃棄' || isHeadOffice()) {
-  if (reviveLabel && d.status !== normal) html += '<button class="btn okb" data-act="revive">' + I.check + esc(reviveLabel) + '</button>';
-  if (kind === '正常' || kind === '') html += '<button class="btn okb" data-act="check">' + I.check + '異常なし（確認を記録）</button>';
-  if (kind !== '故障') html += '<button class="btn danger" data-act="report">' + I.alert + '故障・不具合を報告</button>';
-  else html += '<button class="btn" data-act="report">' + I.alert + '症状を追記する</button>';
-  html += '<button class="btn" data-act="move">' + I.move + '別の場所へ移動</button>';
-  html += '<button class="btn" data-act="change">' + I.edit + '状態・メモを変更</button>';
-  if (kind !== '正常' && kind !== '') html += '<button class="btn ghost" data-act="check">' + I.check + '確認だけ記録する</button>';
-  } else {
-    html += '<p class="hint">廃棄済み端末の変更には本部認証が必要です。</p><button class="btn" data-act="headOffice">本部として認証する</button>';
-  }
-  html += '</div>';
-  if (kind !== '終了' && disposalStatus()) {
-    html += '<h2 class="sec">本部での確認後</h2><div class="card"><p class="hint" style="margin-top:0">故障の確認結果と理由を記録し、廃棄を確定します。本部認証が必要です。</p>' +
-      '<button class="btn danger" data-act="dispose"' + (c.loading || c.error ? ' disabled' : '') + '>' + I.clipboard + '廃棄する（本部専用）</button></div>';
+  if (!needsHeadOffice) {
+    html += '<div class="stack">';
+    if (reviveLabel && d.status !== normal) html += '<button class="btn okb" data-act="revive">' + I.check + esc(reviveLabel) + '</button>';
+    if (kind === '正常' || kind === '') html += '<button class="btn okb" data-act="check">' + I.check + '異常なし（確認を記録）</button>';
+    if (kind !== '故障') html += '<button class="btn danger" data-act="report">' + I.alert + '故障・不具合を報告</button>';
+    else html += '<button class="btn" data-act="report">' + I.alert + '症状を追記する</button>';
+    html += '<button class="btn" data-act="move">' + I.move + '別の場所へ移動</button>';
+    html += '<button class="btn" data-act="change">' + I.edit + '状態・メモを変更</button>';
+    if (kind !== '正常' && kind !== '') html += '<button class="btn ghost" data-act="check">' + I.check + '確認だけ記録する</button>';
+    html += '</div>';
   }
 
   html += '<h2 class="sec">履歴</h2>';
@@ -1605,12 +1618,12 @@ function chipGroup(name, options, selected, multi, statusStyle, cls) {
 function paintForm() {
   var F = st.form;
   var d = F.current;
-  var titles = { report: '故障・不具合の報告', move: '別の場所へ移動', status: '状態・メモの変更', new: '端末の新規登録', dispose: '本部確認・廃棄' };
+  var titles = { report: '故障・不具合の報告', move: '別の場所へ移動', status: '状態・メモの変更', new: '端末の新規登録', dispose: '廃棄を記録' };
   var html = '<div class="card" style="padding:12px 16px"><div class="serial" style="font-size:21px;margin:0">' + esc(F.serial) + '</div>' +
     (d ? '<div class="li-sub">' + esc(d.location) + (d.spot ? '・' + esc(d.spot) : '') + '　' + badge(d.status) + '</div>' : '') + '</div>';
   var showSymptoms = F.type === 'report' || ((F.type === 'status' || F.type === 'new') && kindOf(F.status) === '故障');
   if (F.type === 'dispose') {
-    html += '<div class="note warn">' + I.alert + '<div><b>本部で確認し、廃棄が確定した端末に使います。</b><br>台帳・履歴・元の故障症状は残ります。棚卸と長期未確認の対象から外れます。契約の解約手続きは別途必要です。</div></div>' +
+    html += '<div class="note warn">' + I.alert + '<div><b>本部で廃棄を確認した端末に使います。</b><br>台帳と履歴は残り、棚卸の対象外になります。</div></div>' +
       (d.symptom ? '<div class="card"><div class="label">報告されている症状</div><p class="body">' + esc(d.symptom) + '</p></div>' : '');
   }
 
@@ -1622,7 +1635,7 @@ function paintForm() {
     html += '<div class="field"><span class="label">移動先<span class="req">必須</span></span>' + pickerHtml(F.location) + '</div>';
     var opts = [];
     var cur = d.status;
-    if (F.moveState === 'keep' || !(kindOf(cur) === '正常' || kindOf(cur) === '')) opts.push({ value: 'keep', label: '今の状態のまま（' + cur + '）' });
+    if (F.moveState === 'keep' || !(kindOf(cur) === '正常' || kindOf(cur) === '')) opts.push({ value: 'keep', label: '今の状態のまま（' + statusLabel(cur) + '）' });
     opts.push({ value: 'installed', label: 'もう設置した', sub: '→ ' + normalStatus() });
     if (statusByKind('移動')) opts.push({ value: 'transit', label: 'これから運ぶ・発送する', sub: '→ ' + statusByKind('移動') });
     if (statusByKind('保管')) opts.push({ value: 'stored', label: '保管する（使わない）', sub: '→ ' + statusByKind('保管') });
@@ -1630,7 +1643,10 @@ function paintForm() {
   }
   if (F.type === 'status' || F.type === 'new') {
     html += '<div class="field"><span class="label">状態</span>' +
-      chipGroup('fStatus', st.boot.statuses.filter(function (s) { return s.name !== '廃棄' || (d && d.status === '廃棄' && F.type === 'status'); }).map(function (s) { return { value: s.name, label: s.name, sub: F.type === 'status' ? s.desc : '' }; }), F.status, false, true) + '</div>';
+      chipGroup('fStatus', st.boot.statuses.filter(function (s) { return s.name !== '廃棄' || (d && d.status === '廃棄' && F.type === 'status'); }).map(function (s) {
+        var desc = s.name === '解約・返却' ? '棚卸の対象外になります。' : s.desc;
+        return { value: s.name, label: statusLabel(s.name), sub: F.type === 'status' ? desc : '' };
+      }), F.status, false, true) + '</div>';
   }
   if (showSymptoms) {
     html += '<div class="field"><span class="label">症状（当てはまるものをすべて）</span>' + chipGroup('fSym', st.boot.symptoms, F.symptoms, true) + '</div>';
@@ -1657,7 +1673,7 @@ function paintForm() {
       (F.photos.length < 3 ? '<label class="thumb add" for="photoInput">' + I.camera + '<span>撮影する</span></label><label class="thumb add" for="photoPick">' + I.image + '<span>アルバム</span></label>' : '') +
       '</div></div>';
   }
-  var submit = { report: ['danger', '故障・不具合を報告する'], move: ['primary', '移動を記録する'], status: ['primary', '保存する'], new: ['primary', 'この端末を登録する'], dispose: ['danger', '確認して廃棄を記録する'] }[F.type];
+  var submit = { report: ['danger', '故障・不具合を報告する'], move: ['primary', '移動を記録する'], status: ['primary', '保存する'], new: ['primary', 'この端末を登録する'], dispose: ['danger', '確認へ進む'] }[F.type];
   html += '<div class="sticky-actions"><button class="btn ' + submit[0] + '" data-act="submit">' + esc(submit[1]) + '</button></div>';
   setView(html, titles[F.type]);
 
@@ -1698,7 +1714,7 @@ async function submitForm() {
     if (!isHeadOffice()) { go('headOffice', { returnSerial: F.serial, returnForm: topParams() }); return; }
     if (!F.comment.trim()) { toast('本部での確認結果・廃棄理由を入力してください'); return; }
     if (!disposalStatus() || !d || d.status === '廃棄') { toast('最新の状態を確認してください'); return; }
-    if (!(await confirmModal('廃棄として記録しますか？', F.serial + '\n' + d.location + '\n\n' + d.status + ' → 廃棄\n理由：' + F.comment.trim() + '\n\n台帳・履歴は残ります。契約の解約は別途確認してください。', '廃棄を確定する', true))) return;
+    if (!(await confirmModal('廃棄を記録しますか？', F.serial + '\n' + d.location + '\n\n' + d.status + ' → 廃棄\n理由：' + F.comment.trim() + '\n\n契約の解約は別途手続きしてください。', '廃棄を記録する', true))) return;
   }
   if ((F.type === 'new' || F.type === 'move') && !F.location) { toast(F.type === 'move' ? '移動先を選んでください' : '設置場所を選んでください'); globalActsPick(); return; }
   if (F.type === 'report' && !F.symptoms.length && !F.comment.trim()) { toast('症状を選ぶか、様子を書いてください'); return; }
@@ -1756,7 +1772,7 @@ async function submitSave(payload, F) {
   }
   if (r.result === 'exists') {
     cacheDevice(r.device);
-    openModal('<h3>この端末はすでに登録されています</h3><p class="body"><span class="mono">' + esc(r.device.serial) + '</span>\n' + esc(r.device.location) + '／' + esc(r.device.status) +
+    openModal('<h3>この端末はすでに登録されています</h3><p class="body"><span class="mono">' + esc(r.device.serial) + '</span>\n' + esc(r.device.location) + '／' + esc(statusLabel(r.device.status)) +
       '\n\nほかの人が先に登録したようです。</p><button class="btn primary" data-act="open">この端末を開く</button>',
       { open: function () { closeModal(); st.form = null; if (topName() === 'form') back(); else openSerial(r.device.serial); } });
     return;
