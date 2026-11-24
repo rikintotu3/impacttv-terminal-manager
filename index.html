@@ -1469,9 +1469,15 @@ screens.login = function (p) {
   if (ready && !st.homeShop && !isHeadOffice()) draw('');
   shopInput.addEventListener('input', function () { draw(shopInput.value); });
   shopInput.addEventListener('focus', function () { if (options.hidden) draw(shopInput.value); });
-  shopInput.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') { options.hidden = true; return; }
-    if (e.key !== 'ArrowDown' || !ready) return;
+  shopInput.closest('.login-shop').addEventListener('keydown', function (e) {
+    if (e.isComposing) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      shopInput.focus();
+      options.hidden = true;
+      return;
+    }
+    if (e.key !== 'ArrowDown' || e.target !== shopInput || !ready) return;
     if (options.hidden) draw(shopInput.value);
     var first = options.querySelector('button');
     if (first) { e.preventDefault(); first.focus(); }
