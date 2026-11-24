@@ -396,7 +396,7 @@ var CONFIG = Object.assign({
   FORCE_POLYFILL: false
 }, window.ITV_CONFIG || {});
 
-var APP_VERSION = '2.2.3';
+var APP_VERSION = '2.2.4';
 var IS_GAS = !!(window.google && google.script && google.script.run);
 var MODE = IS_GAS ? 'gas' : (CONFIG.API_URL ? 'web' : (window.__MOCK_API__ ? 'mock' : 'none'));
 var SERIAL_RE = /^[A-Z0-9\-_.\/+]{1,40}$/;
@@ -530,7 +530,7 @@ function setHeadOfficeSession(token, expiresAt) {
 function expireHeadOffice() {
   setHeadOfficeSession('', 0);
   st.listFilter = null;
-  if (['home', 'list', 'settings', 'search'].indexOf(topName()) >= 0) render();
+  if (['home', 'list', 'settings', 'search', 'device', 'pistaImport', 'pistaStatus'].indexOf(topName()) >= 0) render();
 }
 function clearLoginSession() {
   setHeadOfficeSession('', 0);
@@ -562,13 +562,14 @@ function AppError(code, message, extra) { var e = new Error(message); e.code = c
 var API_TIMEOUT_MS = 25000;
 var API_RETRY_MS = 700;
 function apiCommunicationError(code, action, status, retryable, detail) {
-  var updating = ['saveDevice', 'undo', 'inventoryCommit'].indexOf(action) >= 0;
-  var label = { login: 'LOGIN', bootstrap: 'BOOT', getDevice: 'DEVICE', saveDevice: 'SAVE', undo: 'UNDO', inventoryCommit: 'INVENTORY', loginHeadOffice: 'HQ' }[action] || 'REQUEST';
+  var updating = ['saveDevice', 'undo', 'inventoryCommit', 'pistaImport'].indexOf(action) >= 0;
+  var label = { login: 'LOGIN', bootstrap: 'BOOT', getDevice: 'DEVICE', saveDevice: 'SAVE', undo: 'UNDO', inventoryCommit: 'INVENTORY', loginHeadOffice: 'HQ', pistaPreview: 'PISTA-PREVIEW', pistaImport: 'PISTA-IMPORT', pistaStatus: 'PISTA-STATUS' }[action] || 'REQUEST';
   // 診断情報は固定の種別・操作名・HTTP番号のみ。本文や認証情報は保持しない。
   var diagnostic = 'ITV-' + label + '-' + code + (status ? '-' + status : '') + (detail ? '-' + detail : '');
   var message = updating
     ? '処理結果を確認できませんでした。すでに保存・反映されている可能性があります。再送する前に、通信状態を確認し、対象端末の最新状態・履歴を開いて結果を確認してください。確認できない場合は本部へ連絡してください。'
     : '通信状態を確認し、少し待ってからもう一度お試しください。改善しない場合は、この画面を開き直してください。それでも続く場合は、診断コードを本部へ伝えてください。';
+  if (action === 'pistaImport') message = '取込結果を確認できませんでした。同じCSVで「変更内容を確認」を押すと、残っている変更を確認できます。';
   if (!updating && code === 'TIMEOUT') message = '応答を待つ時間が上限に達しました。' + message;
   else if (!updating && code === 'HTTP') message = '接続先で通信エラーが発生しました。' + message;
   else if (!updating && code === 'RESPONSE') message = '接続先から正しい形式の応答を受け取れませんでした。' + message;
@@ -584,6 +585,14 @@ function validApiData(action, data) {
   if (action === 'bootstrap') return !!(data.settings && typeof data.settings === 'object' && !Array.isArray(data.settings) &&
     Array.isArray(data.devices) && Array.isArray(data.statuses) && Array.isArray(data.stores));
   if (action === 'getDevice') return (data.device === null || !!(data.device && typeof data.device === 'object' && !Array.isArray(data.device))) && Array.isArray(data.history);
+  if (action === 'pistaPreview' || action === 'pistaImport') {
+    return ['total', 'added', 'updated', 'unchanged', 'newDevices'].every(function (k) { return Number.isSafeInteger(data[k]) && data[k] >= 0; }) &&
+      data.total === data.added + data.updated + data.unchanged && data.newDevices <= data.total &&
+      (action === 'pistaImport' || (typeof data.fingerprint === 'string' && data.fingerprint.length > 0));
+  }
+  if (action === 'pistaStatus') return data.record === null || !!(data.record &&
+    ['group_name', 'model_name', 'online_status', 'delivery_status'].every(function (k) { return typeof data.record[k] === 'string'; }) &&
+    Number.isFinite(data.record.importedAt));
   return true;
 }
 function api(action, payload) {
@@ -595,7 +604,7 @@ function api(action, payload) {
       var timer = setTimeout(function () {
         finish(apiCommunicationError('TIMEOUT', action, 0, true));
         if (controller) controller.abort();
-      }, API_TIMEOUT_MS);
+      }, action === 'pistaImport' ? 120000 : (action === 'pistaPreview' ? 60000 : API_TIMEOUT_MS));
       function finish(error, data) {
         if (settled) return;
         settled = true;
@@ -644,7 +653,7 @@ function api(action, payload) {
     });
   }
   return attempt().catch(function (error) {
-    var mayRetry = MODE === 'web' && ['login', 'bootstrap', 'getDevice'].indexOf(action) >= 0;
+    var mayRetry = MODE === 'web' && ['login', 'bootstrap', 'getDevice', 'pistaStatus'].indexOf(action) >= 0;
     if (!mayRetry || !error.retryable) throw error;
     // 更新処理は自動再送しない。読み取り・店舗ログインのみ最大1回。
     return sleep(API_RETRY_MS).then(attempt);
@@ -717,7 +726,7 @@ function refreshBootQuietly() {
   loadBoot().then(function () {
     var scopeChanged = wasHeadOffice !== isHeadOffice() || previousShop !== st.homeShop;
     if (scopeChanged) st.listFilter = null;
-    if (topName() === 'home' || (scopeChanged && ['list', 'settings', 'search'].indexOf(topName()) >= 0)) render();
+    if (topName() === 'home' || (scopeChanged && ['list', 'settings', 'search', 'device', 'pistaImport', 'pistaStatus'].indexOf(topName()) >= 0)) render();
   }, function () { /* 無視 */ });
 }
 
@@ -1565,9 +1574,10 @@ screens.home = function () {
     html += '<div class="note danger">' + I.alert + '<div><b>台帳に同じシリアルが複数行あります（' + b.duplicates.length + '件）</b><br>' +
       '本部でメニュー「台帳のチェック」を実行してください。<br><span class="mono">' + esc(b.duplicates.slice(0, 3).join('、')) + '</span></div></div>';
   }
-  html += homeToolsHtml() + overviewHtml() + recentOpsHtml();
+  html += homeToolsHtml() + '<button type="button" class="btn left" data-act="openPistaImport">' + I.refresh + 'PISTAの最新状況をCSVで取り込む</button>' + overviewHtml() + recentOpsHtml();
   html += '<p class="foot">v' + APP_VERSION + '・<button class="linklike" data-act="refresh">' + I.refresh + '最新の情報にする</button></p>';
   setView(html, appName());
+  acts.openPistaImport = function () { go('pistaImport'); };
 };
 
 function homeToolsHtml(shop) {
@@ -1580,6 +1590,183 @@ function homeToolsHtml(shop) {
     '<button class="btn" data-act="goInv">' + I.clipboard + '棚卸</button>' +
     '<button class="btn" data-act="goList">' + I.list + '一覧を見る</button></div></div>';
 }
+
+/* 本部：PISTAの端末CSV */
+var PISTA_COLUMNS = ['terminal_no', 'group_name', 'model_name', 'online_status', 'delivery_status'];
+function parsePistaCsv(text) {
+  var rows = [], seen = new Set(), headerWidth = 0, positions;
+  var field = '', record = [], quoted = false, closed = false, line = 1, start = 1;
+  function invalid(reason) { throw AppError('BAD_CSV', 'CSVの' + start + '行目：' + reason); }
+  function finishRecord() {
+    record.push(field);
+    if (record.length > 1 || record[0].trim()) {
+      if (!positions) {
+        var header = record.map(function (v) { return v.trim(); });
+        headerWidth = header.length;
+        positions = PISTA_COLUMNS.map(function (key) {
+          var pos = header.indexOf(key);
+          if (pos < 0 || header.lastIndexOf(key) !== pos) invalid('PISTAの端末CSVを選んでください。必要な列「' + key + '」を確認してください。');
+          return pos;
+        });
+      } else {
+        if (record.length !== headerWidth) invalid('列数が見出しと異なります。');
+        if (rows.length >= 2000) invalid('一度に取り込めるのは2,000台までです。');
+        var row = {};
+        PISTA_COLUMNS.forEach(function (key, i) { row[key] = record[positions[i]].trim(); });
+        row.terminal_no = normKey(row.terminal_no);
+        if (!/^[A-Z0-9]{6}[0-9]{7}$/.test(row.terminal_no)) invalid('端末番号の形式を確認してください。');
+        if (seen.has(row.terminal_no)) invalid('同じ端末番号が複数あります。');
+        if (!row.group_name) invalid('グループ名が空欄です。');
+        seen.add(row.terminal_no);
+        rows.push(row);
+      }
+    }
+    record = []; field = ''; closed = false;
+  }
+  for (var i = 0; i < text.length; i++) {
+    var ch = text[i];
+    if (quoted) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else { quoted = false; closed = true; }
+      } else {
+        field += ch;
+        if (ch === '\n' || (ch === '\r' && text[i + 1] !== '\n')) line++;
+      }
+    } else if (ch === ',') {
+      record.push(field); field = ''; closed = false;
+    } else if (ch === '\r' || ch === '\n') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      finishRecord(); start = ++line;
+    } else if (closed) {
+      if (ch !== ' ' && ch !== '\t') invalid('引用符の後に余分な文字があります。');
+    } else if (ch === '"') {
+      if (field.length) invalid('引用符の位置を確認してください。');
+      quoted = true;
+    } else field += ch;
+  }
+  if (quoted) invalid('引用符が閉じていません。');
+  finishRecord();
+  if (!rows.length) throw AppError('BAD_CSV', '端末データがありません。PISTAの端末CSVを選んでください。');
+  return rows;
+}
+async function readPistaFile(file) {
+  if (!file || !file.size) throw AppError('BAD_CSV', '中身のあるCSVファイルを選んでください。');
+  if (file.size > 32 * 1024 * 1024) throw AppError('BAD_CSV', '32MB以内のCSVファイルを選んでください。');
+  var data, text;
+  try { data = new Uint8Array(await file.arrayBuffer()); }
+  catch (e) { throw AppError('BAD_CSV', 'ファイルを開けませんでした。もう一度選んでください。'); }
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(data); }
+  catch (e) {
+    try {
+      if (data[0] === 0xef && data[1] === 0xbb && data[2] === 0xbf) throw e;
+      text = new TextDecoder('shift_jis', { fatal: true }).decode(data);
+    } catch (_) { throw AppError('BAD_CSV', '文字コードを読み取れません。PISTAから出力したCSVを選んでください。'); }
+  }
+  return parsePistaCsv(text);
+}
+function pistaSummary(title, stats) {
+  return '<h2 class="sec" style="margin-top:0">' + title + '</h2><dl class="kv">' +
+    '<dt>CSVの端末数</dt><dd>' + stats.total + '台</dd>' +
+    '<dt>PISTA情報</dt><dd>初回 ' + stats.added + '台 ／ 更新 ' + stats.updated + '台 ／ 変更なし ' + stats.unchanged + '台</dd>' +
+    '<dt>端末台帳に新規登録</dt><dd>' + stats.newDevices + '台</dd></dl>';
+}
+screens.pistaImport = function () {
+  if (!isHeadOffice()) { go('home', null, { root: true }); return; }
+  setView('<div class="card stack"><p style="margin:0">PISTAから出力した端末CSVを選んでください。通信・配信状況を更新します。</p>' +
+    '<button type="button" class="btn" id="pistaChoose">CSVを選ぶ</button>' +
+    '<input type="file" id="pistaFile" accept=".csv,text/csv" tabindex="-1" hidden><span class="hint" id="pistaFilename" hidden></span>' +
+    '<button type="button" class="btn" id="pistaPreview" hidden>変更内容を確認</button></div>' +
+    '<div class="card stack" id="pistaOutcome" aria-live="polite" hidden><div id="pistaSummary" tabindex="-1"></div>' +
+    '<button type="button" class="btn primary" id="pistaApply" hidden>変更を反映する</button></div>', 'PISTAのCSV取込');
+  var input = $('#pistaFile'), choose = $('#pistaChoose'), check = $('#pistaPreview'), apply = $('#pistaApply');
+  var filename = $('#pistaFilename'), outcome = $('#pistaOutcome'), summary = $('#pistaSummary');
+  var rows = null, preview = null, busy = false;
+  function active() { return input.isConnected && isHeadOffice(); }
+  function lock(value) { busy = value; choose.disabled = input.disabled = check.disabled = apply.disabled = value; }
+  function showError(e) {
+    if (e.code === 'AUTH' || e.code === 'HQ_AUTH') { handleError(e); return; }
+    summary.textContent = e.message || '通信状態を確認して、もう一度お試しください。';
+    outcome.hidden = false; summary.focus();
+  }
+  async function checkFile() {
+    var file = input.files[0];
+    if (!active() || !file || busy) return;
+    lock(true);
+    preview = rows = null;
+    apply.hidden = check.hidden = outcome.hidden = true;
+    showBusy('変更内容を確認しています…');
+    try {
+      var data = await readPistaFile(file);
+      if (!active()) return;
+      var result = await api('pistaPreview', { rows: data });
+      if (!active()) return;
+      rows = data; preview = result;
+      var changes = result.added + result.updated + result.newDevices > 0;
+      summary.innerHTML = pistaSummary(changes ? '反映する内容' : 'すべて反映済みです', result) +
+        (result.newDevices ? '<p class="hint">新しい端末は「未確認（PISTA取込）」で登録します。</p>' : '');
+      outcome.hidden = false; apply.hidden = !changes;
+      summary.focus();
+    } catch (e) {
+      if (active()) { check.hidden = e.code === 'BAD_CSV'; showError(e); }
+    } finally { hideBusy(); lock(false); }
+  }
+  choose.onclick = function () { input.click(); };
+  input.onchange = function () {
+    var file = input.files[0];
+    if (!file) {
+      rows = preview = null;
+      filename.textContent = ''; filename.hidden = check.hidden = outcome.hidden = apply.hidden = true;
+      return;
+    }
+    filename.textContent = file.name; filename.hidden = false;
+    checkFile();
+  };
+  check.onclick = checkFile;
+  apply.onclick = async function () {
+    if (!active() || busy || !rows || !preview) return;
+    lock(true); showBusy('PISTAの情報を反映しています…');
+    try {
+      var result = await api('pistaImport', { rows: rows, fingerprint: preview.fingerprint });
+      st.lastBoot = 0;
+      if (!active()) return;
+      summary.innerHTML = pistaSummary('反映しました', result);
+      try { await loadBoot(); }
+      catch (err) {
+        if (!active()) return;
+        if (err.code === 'AUTH' || err.code === 'HQ_AUTH') { handleError(err); return; }
+        summary.insertAdjacentHTML('beforeend', '<p class="hint">一覧の更新は、ホームの「最新の情報にする」を押してください。</p>');
+      }
+      if (active()) summary.focus();
+      else if (input.isConnected) render();
+    } catch (e) {
+      if (active()) { check.hidden = false; showError(e); }
+    } finally {
+      preview = rows = null; apply.hidden = true;
+      hideBusy(); lock(false);
+    }
+  };
+};
+
+screens.pistaStatus = function (p) {
+  if (!isHeadOffice()) { go('home', null, { root: true }); return; }
+  setView('<div class="card"><div class="serial">' + esc(p.serial) + '</div>' +
+    '<div id="pistaRecord" aria-live="polite"><p class="hint">読み込み中…</p></div></div>', 'PISTAの最新状況');
+  var body = $('#pistaRecord');
+  api('pistaStatus', { serial: p.serial }).then(function (result) {
+    if (!body.isConnected || !isHeadOffice()) return;
+    var r = result.record;
+    if (!r) { body.textContent = 'この端末のPISTA情報はまだ取り込まれていません。'; return; }
+    body.innerHTML = '<dl class="kv"><dt>通信状況</dt><dd>' + esc(r.online_status || '未設定') + '</dd><dt>配信状況</dt><dd>' + esc(r.delivery_status || '未設定') +
+      '</dd><dt>グループ</dt><dd>' + esc(r.group_name || '未設定') + '</dd><dt>機種</dt><dd>' + esc(r.model_name || '未設定') +
+      '</dd><dt>PISTA情報の最終更新</dt><dd>' + esc(fmtDate(r.importedAt)) + '</dd></dl>';
+  }, function (e) {
+    if (!body.isConnected || !isHeadOffice()) return;
+    if (e.code === 'AUTH' || e.code === 'HQ_AUTH') { handleError(e); return; }
+    body.innerHTML = '<p class="body">' + esc(e.message) + '</p><button type="button" class="btn" data-act="retryPista">もう一度読み込む</button>';
+    acts.retryPista = render;
+  });
+};
 
 function paintStoreHome() {
   var names = homeShopNames(), shop = st.homeShop, locations = overviewLocations();
@@ -1875,6 +2062,7 @@ function paintDevice() {
     if (!c.loading && !c.error && d && disposalStatus() && d.status !== '廃棄') go('form', { serial: c.serial, type: 'dispose' });
   };
   acts.headOffice = function () { go('headOffice', { returnSerial: c.serial }); };
+  acts.showPistaStatus = function () { if (isHeadOffice()) go('pistaStatus', { serial: c.serial }); };
   acts.register = function () { go('form', { serial: c.serial, type: 'new' }); };
   acts.check = function () { quickSave('check'); };
   acts.revive = function () { quickSave('revive'); };
@@ -1943,6 +2131,7 @@ function paintDevice() {
   html += '</div>';
 
   var reviveLabel = { '故障': '直った（' + normal + 'に戻す）', '修理': '修理から戻った（' + normal + 'にする）', '移動': 'ここに届いた（' + normal + 'にする）', '不明': '見つかった（' + normal + 'に戻す）', '保管': '使い始める（' + normal + 'にする）' }[kind];
+  if (isHeadOffice() && !c.loading && !c.error) html += '<div class="card"><button type="button" class="btn left" data-act="showPistaStatus">' + I.screen + 'PISTAの最新状況を見る</button></div>';
   var banner = {
     '故障': ['danger', '故障・不具合として報告されています'],
     '修理': ['warn', '修理・交換に出している端末です'],
@@ -2539,13 +2728,14 @@ screens.settings = function () {
     '</div><p class="hint" style="margin-bottom:0">いまの方法：' + (scanMode() === 'live' ? 'かざして読み取る' : '撮影して読み取る') + (Decoder.engine ? '（' + esc(Decoder.engine) + '）' : '') + '</p></div>' +
     installCardHtml() +
     '<div class="card"><div class="label">本部専用の操作</div><p class="hint">全店の稼働・契約状況の表示や廃棄の記録には、本部認証が必要です。</p>' +
-    (isHeadOffice() ? '<p class="hint">本部認証中（' + esc(fmtDate(st.hqExpiresAt)) + 'まで）</p><button class="btn" data-act="hqLogout">本部認証を終了する</button>' : '<button class="btn" data-act="hqLogin">本部として認証する</button>') + '</div>' +
+    (isHeadOffice() ? '<p class="hint">本部認証中（' + esc(fmtDate(st.hqExpiresAt)) + 'まで）</p><div class="stack"><button class="btn" data-act="openPistaImport">PISTAの最新状況をCSVで取り込む</button><button class="btn" data-act="hqLogout">本部認証を終了する</button></div>' : '<button class="btn" data-act="hqLogin">本部として認証する</button>') + '</div>' +
     '<div class="stack"><button class="btn" data-act="refresh">' + I.refresh + '最新の情報にする</button>' +
     '<button class="btn" data-act="testScan">' + I.camera + '読み取り機能を準備・確認する</button>' +
     '<button class="btn ghost" data-act="logout">合言葉を入力し直す（ログアウト）</button></div>' +
     '<p class="foot">バージョン ' + APP_VERSION + '・接続：' + ({ gas: 'Googleスプレッドシート', web: 'Googleスプレッドシート', mock: 'デモ（保存されません）' }[MODE] || MODE) +
     '<br>この端末のID：' + esc(st.deviceId.slice(0, 8)) + '・' + esc(deviceLabel()) + '</p>';
   setView(html, '設定');
+  acts.openPistaImport = function () { go('pistaImport'); };
   acts.hqLogin = function () { go('headOffice', {}); };
   acts.hqLogout = function () { setHeadOfficeSession('', 0); render(); toast('本部認証を終了しました'); };
   acts.mode = function (el) { st.scanMode = el.getAttribute('data-v'); st.liveFailed = false; store.set('scanMode', st.scanMode); render(); };
