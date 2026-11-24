@@ -95,6 +95,27 @@ button.note{font:inherit;cursor:pointer}
 .badge i{width:10px;height:10px;border-radius:50%;background:var(--c);flex:0 0 auto}
 .pill{display:inline-flex;align-items:center;padding:6px 16px;border-radius:999px;background:var(--c);color:#fff;font-weight:800;font-size:17px}
 .overview-card{padding:0}
+.store-home{max-width:600px;margin:0 auto}
+.store-picker{padding:14px 16px}
+.store-picker label{display:block;margin-bottom:5px;font-size:14px;font-weight:700}
+.store-picker-field{display:flex;align-items:center;gap:8px}
+.store-picker input{flex:1;min-width:0}
+.shop-options{max-height:220px;overflow:auto;margin-top:8px}
+.shop-options .overview-row{font-weight:600;min-height:44px}
+.shop-options .overview-row .i{margin-left:auto}
+.store-status{padding:0 12px 12px}
+.store-status .overview-head{padding:15px 2px;min-height:0}
+.store-status .overview-head h2{flex:1;min-width:0;overflow-wrap:anywhere}
+.store-status .overview-head img{width:50px;height:50px;object-fit:contain;flex:none}
+.store-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.store-metrics .contract-stat{margin:0}
+.store-metrics .contract-stat[data-group="device:shopActive"]{background:var(--ok-bg)}
+.store-metrics .contract-stat[data-group="device:shopFault"]{background:var(--danger-bg)}
+.store-status .overview-row[data-group="store:other"]{margin-top:6px}
+.store-tools{padding:0 12px}
+.store-tools summary{padding:10px 4px;min-height:44px;font-size:14px;font-weight:700;cursor:pointer}
+.store-tools .home-tools{display:grid;grid-template-columns:1fr;margin:4px 0 12px}
+.store-tools .home-shortcuts{grid-template-columns:repeat(2,minmax(0,1fr))}
 .home-view{max-width:600px}
 .home-tools,.home-shortcuts{display:grid;gap:8px}
 .home-tools{margin-bottom:18px}
@@ -445,7 +466,7 @@ function ago(ms) {
 
 function storageKey(k) {
   // デモで作った履歴・棚卸・ログイン状態を、本番へ引き継がない。
-  var scoped = ['token', 'ops', 'inv', 'recentStores', 'hq'].indexOf(k) >= 0;
+  var scoped = ['token', 'ops', 'inv', 'recentStores', 'homeShop', 'hq'].indexOf(k) >= 0;
   var scope = IS_GAS ? 'gas' : (CONFIG.API_URL ? 'web.' + encodeURIComponent(CONFIG.API_URL) : 'demo');
   return 'itv.' + (scoped ? scope + '.' : '') + k;
 }
@@ -465,6 +486,7 @@ function readHeadOfficeSession() {
   return { token: '', expiresAt: 0 };
 }
 var headOfficeSession = readHeadOfficeSession();
+var headOfficeExpiryTimer;
 
 /* ---------- 状態 ---------- */
 var st = {
@@ -475,6 +497,7 @@ var st = {
   deviceId: store.get('deviceId', ''),
   scanMode: store.get('scanMode', 'auto'),
   recentStores: store.get('recentStores', []),
+  homeShop: store.get('homeShop', ''),
   ops: store.get('ops', []),
   inv: store.get('inv', null),
   boot: null,
@@ -491,6 +514,7 @@ var st = {
 if (!st.deviceId) { st.deviceId = newId(); store.set('deviceId', st.deviceId); }
 
 function setHeadOfficeSession(token, expiresAt) {
+  clearTimeout(headOfficeExpiryTimer);
   st.hqToken = token || '';
   st.hqExpiresAt = Number(expiresAt) || 0;
   if (st.boot) st.boot.headOfficeAuthorized = false;
@@ -498,6 +522,11 @@ function setHeadOfficeSession(token, expiresAt) {
     if (st.hqToken) sessionStorage.setItem(storageKey('hq'), JSON.stringify({ token: st.hqToken, expiresAt: st.hqExpiresAt }));
     else sessionStorage.removeItem(storageKey('hq'));
   } catch (e) { /* 保存不可でもこの画面では使える */ }
+}
+function expireHeadOffice() {
+  setHeadOfficeSession('', 0);
+  st.listFilter = null;
+  if (['home', 'list', 'settings', 'search'].indexOf(topName()) >= 0) render();
 }
 function isHeadOffice() {
   return !!(st.hqToken && st.hqExpiresAt > Date.now() && st.boot && st.boot.headOfficeAuthorized);
@@ -656,7 +685,16 @@ async function loadBoot() {
   var b = await api('bootstrap');
   st.boot = b;
   if (!b.headOfficeAuthorized) setHeadOfficeSession('', 0);
-  else st.hqExpiresAt = Number(b.headOfficeExpiresAt) || st.hqExpiresAt;
+  else {
+    st.hqExpiresAt = Number(b.headOfficeExpiresAt) || st.hqExpiresAt;
+    clearTimeout(headOfficeExpiryTimer);
+    headOfficeExpiryTimer = setTimeout(expireHeadOffice, Math.max(0, st.hqExpiresAt - Date.now()));
+  }
+  if (st.homeShop) {
+    var savedShopKey = normKey(st.homeShop);
+    var validShop = homeShopNames().find(function (name) { return normKey(name) === savedShopKey; }) || '';
+    if (validShop !== st.homeShop) { st.homeShop = validShop; store.set('homeShop', validShop); }
+  }
   st.devices = new Map(b.devices.map(function (d) { return [d.s, d]; }));
   st.statusMap = new Map(b.statuses.map(function (s) { return [s.name, s]; }));
   st.lastBoot = Date.now();
@@ -665,7 +703,12 @@ async function loadBoot() {
 }
 function refreshBootQuietly() {
   if (!st.token || Date.now() - st.lastBoot < 60000) return;
-  loadBoot().then(function () { if (topName() === 'home') render(); }, function () { /* 無視 */ });
+  var wasHeadOffice = isHeadOffice(), previousShop = st.homeShop;
+  loadBoot().then(function () {
+    var scopeChanged = wasHeadOffice !== isHeadOffice() || previousShop !== st.homeShop;
+    if (scopeChanged) st.listFilter = null;
+    if (topName() === 'home' || (scopeChanged && ['list', 'settings', 'search'].indexOf(topName()) >= 0)) render();
+  }, function () { /* 無視 */ });
 }
 
 /* ---------- マスタの道具 ---------- */
@@ -741,6 +784,25 @@ function overviewLocations() {
   if (home) map.set(home, '本部');
   return map;
 }
+function homeShopNames() {
+  var locations = overviewLocations(), shops = new Map();
+  storeNames().forEach(function (name) {
+    var key = normKey(name);
+    var group = locations.get(key);
+    if (key && (group === '店舗' || group === PROVISIONAL_SHOP_GROUP) && !shops.has(key)) shops.set(key, name);
+  });
+  return Array.from(shops.values());
+}
+var PROVISIONAL_SHOP_GROUP = normKey('PISTAグループ（暫定）');
+var STORE_GROUPS = { 'device:shopActive': '稼働中', 'device:shopFault': '故障', 'store:other': 'その他の状態' };
+function storeGroup(d) {
+  switch (kindOf(d.st)) {
+    case '正常': return 'device:shopActive';
+    case '故障': return 'device:shopFault';
+    default: return 'store:other';
+  }
+}
+function isInShop(d, shop) { return normKey(d.l) === normKey(shop); }
 function deviceGroup(d, locations) {
   var status = normKey(d.st);
   var kind = kindOf(d.st);
@@ -1409,27 +1471,103 @@ screens.error = function (p) {
  * 画面：ホーム
  * ========================================================= */
 screens.home = function () {
+  if (!isHeadOffice()) { paintStoreHome(); return; }
   var b = st.boot;
-  var photo = scanMode() !== 'live';
   var html = '<p class="hello">' + esc(st.user) + ' さん</p>';
   if (MODE === 'mock') html += '<div class="note warn">' + I.alert + '<div><b>デモモード</b>：記録は保存されません。再読み込みすると初期状態に戻ります。</div></div>';
   if (b.duplicates && b.duplicates.length) {
     html += '<div class="note danger">' + I.alert + '<div><b>台帳に同じシリアルが複数行あります（' + b.duplicates.length + '件）</b><br>' +
       '本部でメニュー「台帳のチェック」を実行してください。<br><span class="mono">' + esc(b.duplicates.slice(0, 3).join('、')) + '</span></div></div>';
   }
-  if (st.inv) {
-    html += '<button class="note info" data-act="resumeInv">' + I.clipboard + '<div><b>棚卸の途中です</b><br>' + esc(st.inv.location) + '・' + st.inv.items.length + '台読み取り済み<br><u>続きから再開する</u></div></button>';
-  }
-  html += '<div class="home-tools">' + scanButtonHtml('バーコードを読み取る', photo ? '黄色いシール全体を大きく撮影' : '黄色いシールを枠に合わせると自動読取');
-  html += '<div class="home-shortcuts"><button class="btn" data-act="goSearch">' + I.keyboard + '番号で探す</button>' +
-    '<label class="btn" for="pickInput" role="button" tabindex="0">' + I.image + '写真から読む</label>' +
-    '<button class="btn" data-act="goInv">' + I.clipboard + '棚卸</button>' +
-    '<button class="btn" data-act="goList">' + I.list + '一覧を見る</button></div></div>';
-  html += overviewHtml();
-  html += recentOpsHtml();
+  html += homeToolsHtml() + overviewHtml() + recentOpsHtml();
   html += '<p class="foot">v' + APP_VERSION + '・<button class="linklike" data-act="refresh">' + I.refresh + '最新の情報にする</button></p>';
   setView(html, appName());
 };
+
+function homeToolsHtml(shop) {
+  var photo = scanMode() !== 'live';
+  var resume = st.inv && (!shop || normKey(st.inv.location) === normKey(shop));
+  return (resume ? '<button class="note info" data-act="resumeInv">' + I.clipboard + '<div><b>棚卸の途中です</b><br>' + esc(st.inv.location) + '・' + st.inv.items.length + '台読み取り済み<br><u>続きから再開する</u></div></button>' : '') +
+    '<div class="home-tools">' + scanButtonHtml('バーコードを読み取る', photo ? '黄色いシール全体を大きく撮影' : '黄色いシールを枠に合わせると自動読取') +
+    '<div class="home-shortcuts"><button class="btn" data-act="goSearch">' + I.keyboard + '番号で探す</button>' +
+    '<label class="btn" for="pickInput" role="button" tabindex="0">' + I.image + '写真から読む</label>' +
+    '<button class="btn" data-act="goInv">' + I.clipboard + '棚卸</button>' +
+    '<button class="btn" data-act="goList">' + I.list + '一覧を見る</button></div></div>';
+}
+
+function paintStoreHome() {
+  var names = homeShopNames(), shop = st.homeShop, locations = overviewLocations();
+  var refresh = '<button type="button" class="linklike" data-act="refresh">' + I.refresh + '最新の情報にする</button>';
+  var html = '<div class="store-home"><form class="card store-picker" id="shopForm"><label for="homeShopQ">店舗名</label>' +
+    '<div class="store-picker-field"><input type="search" id="homeShopQ" placeholder="店舗名を入力" autocomplete="off" value="' + esc(shop) + '">' +
+    (shop ? '<button type="button" class="btn small" data-act="switchShop">切り替え</button>' : '') + '</div>' +
+    '<div class="shop-options" id="homeShopOptions" role="group" aria-label="店舗候補"></div>' + (!names.length ? refresh : '') + '</form>';
+  if (shop) html += '<div id="shopHomeContent">' + storeStatusHtml(shop, locations.get(normKey(shop)) === PROVISIONAL_SHOP_GROUP) +
+    '<details class="card store-tools"><summary>読み取り・棚卸などの操作</summary>' +
+    homeToolsHtml(shop) + recentOpsHtml(shop) + refresh + '</details></div>';
+  setView(html + '</div>', appName());
+  var input = $('#homeShopQ'), options = $('#homeShopOptions'), currentContent = $('#shopHomeContent');
+  function hits() {
+    var q = normKey(input.value);
+    return names.filter(function (name) { return normKey(name).indexOf(q) >= 0; });
+  }
+  function draw(namesToShow) {
+    options.hidden = false;
+    options.innerHTML = namesToShow.map(function (name) {
+      return '<button type="button" class="overview-row" data-act="homeShop" data-name="' + esc(name) + '"><span class="overview-label">' +
+        esc(name) + (locations.get(normKey(name)) === PROVISIONAL_SHOP_GROUP ? ' <small>（暫定）</small>' : '') + '</span>' + I.chevron + '</button>';
+    }).join('') || '<p class="hint" role="status">' + (names.length ? '一致する店舗がありません' : '選択できる店舗がありません。本部にご確認ください。') + '</p>';
+  }
+  function choose(name) {
+    if (names.indexOf(name) === -1) return;
+    st.homeShop = name;
+    store.set('homeShop', name);
+    st.listFilter = null;
+    render();
+    $('#shopStatusTitle').focus();
+  }
+  if (shop) options.hidden = true; else draw(names);
+  acts.homeShop = function (el) { choose(el.getAttribute('data-name')); };
+  acts.switchShop = function () { input.focus(); input.select(); draw(names); };
+  input.addEventListener('focus', function () {
+    if (input.value === shop) { input.select(); draw(names); } else draw(hits());
+  });
+  input.addEventListener('input', function () {
+    if (currentContent) currentContent.hidden = normKey(input.value) !== normKey(shop);
+    draw(hits());
+  });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && shop) {
+      e.preventDefault(); input.value = shop; options.hidden = true; currentContent.hidden = false;
+    }
+  });
+  $('#shopForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var matches = hits(), exact = matches.find(function (name) { return normKey(name) === normKey(input.value); });
+    if (exact || matches.length === 1) choose(exact || matches[0]);
+    else draw(matches);
+  });
+}
+
+function storeStatusHtml(shop, provisional) {
+  var counts = Object.create(null), total = 0;
+  st.devices.forEach(function (d) {
+    if (!isInShop(d, shop)) return;
+    var group = storeGroup(d);
+    counts[group] = (counts[group] || 0) + 1;
+    total++;
+  });
+  function row(group, icon, tile) {
+    return '<button class="overview-row' + (tile ? ' contract-stat' : '') + '" data-act="listOverview" data-group="' + group + '">' +
+      '<span class="overview-mark" aria-hidden="true">' + icon + '</span><span class="overview-label">' + STORE_GROUPS[group] +
+      '</span><b>' + (counts[group] || 0) + '<span class="unit">台</span></b>' + I.chevron + '</button>';
+  }
+  return '<section class="card store-status" aria-labelledby="shopStatusTitle"><div class="overview-head"><h2 id="shopStatusTitle" tabindex="-1">' +
+    esc(shop) + 'の稼働状況<small>登録' + total + '台</small></h2><img src="illustrations/impacttv-terminal.webp" alt="" width="50" height="50"></div>' +
+    (provisional ? '<p class="hint">台帳の登録先（暫定）</p>' : '') + '<div class="store-metrics">' +
+    row('device:shopActive', I.shop, true) + row('device:shopFault', I.alert, true) + '</div>' +
+    (counts['store:other'] ? row('store:other', I.list, false) : '') + '</section>';
+}
 
 function overviewHtml() {
   var locations = overviewLocations();
@@ -1477,8 +1615,14 @@ function addOp(o) {
   st.ops = [o].concat(st.ops.filter(function (x) { return x.opId !== o.opId; })).slice(0, 12);
   store.set('ops', st.ops);
 }
-function recentOpsHtml() {
-  var ops = st.ops.slice(0, 5);
+function recentOpsHtml(shop) {
+  var ops = st.ops.filter(function (op) {
+    if (!shop) return true;
+    if (op.location) return normKey(op.location) === normKey(shop);
+    if (!op.serial) return op.title === '棚卸：' + shop;
+    var device = st.devices.get(op.serial);
+    return device && isInShop(device, shop);
+  }).slice(0, 5);
   if (!ops.length) return '';
   return '<h2 class="sec">この端末での最近の記録</h2><div class="card list">' + ops.map(function (o) {
     var main = '<span class="li-top"><span class="mono">' + esc(o.title) + '</span></span><span class="li-sub">' + esc(o.op) + '・' + esc(ago(o.at)) + (o.undone ? '（取り消し済み）' : '') + '</span>';
@@ -1537,7 +1681,7 @@ function deviceRowHtml(d) {
   return '<button class="li" data-act="openSerial" data-serial="' + esc(d.s) + '">' +
     '<span class="li-top"><span class="mono">' + esc(d.s) + '</span>' + badge(d.st) + '</span>' +
     '<span class="li-sub">' + esc(d.l || '（場所なし）') + (d.p ? '・' + esc(d.p) : '') + (d.m ? '・' + esc(d.m) : '') + '</span>' +
-    '<span class="li-sub"><span class="row-contract-label">契約</span>　' + esc(contractLabel(d.c)) + '</span>' +
+    (isHeadOffice() ? '<span class="li-sub"><span class="row-contract-label">契約</span>　' + esc(contractLabel(d.c)) + '</span>' : '') +
     '<span class="li-sub' + (stale ? ' warn-text' : '') + '">' + (d.ck ? '確認：' + esc(ago(d.ck)) + (d.cb ? '（' + esc(d.cb) + '）' : '') : 'まだ読み取り確認されていません') + '</span>' +
     '</button>';
 }
@@ -1545,13 +1689,25 @@ function deviceRowHtml(d) {
 /* =========================================================
  * 画面：一覧
  * ========================================================= */
+function matchesListScope(d, filter, locations) {
+  if (filter.shop && !isInShop(d, filter.shop)) return false;
+  if (!filter.group) return true;
+  return filter.shop ? storeGroup(d) === filter.group : matchesOverview(d, filter.group, locations);
+}
 screens.list = function (p) {
-  var f = st.listFilter = st.listFilter || { q: '', status: '', group: p.group || '', loc: '', stale: false, limit: 80 };
+  var hq = isHeadOffice(), shop = hq ? '' : st.homeShop;
+  if (!hq && !shop) { go('home', {}, { root: true }); return; }
+  var labels = hq ? OVERVIEW_LABELS : STORE_GROUPS;
+  var f = st.listFilter;
+  if (!f || f.shop !== shop) {
+    f = st.listFilter = { q: '', status: '', group: Object.prototype.hasOwnProperty.call(labels, p.group) ? p.group : '',
+      loc: '', shop: shop, stale: false, limit: 80 };
+  }
   var counts = Object.create(null);
   var locs = Object.create(null);
-  var locations = f.group ? overviewLocations() : null;
+  var locations = hq && f.group ? overviewLocations() : null;
   st.devices.forEach(function (d) {
-    if (f.group && !matchesOverview(d, f.group, locations)) return;
+    if (!matchesListScope(d, f, locations)) return;
     counts[d.st] = (counts[d.st] || 0) + 1;
     locs[d.l] = 1;
   });
@@ -1565,29 +1721,30 @@ screens.list = function (p) {
       return '<button class="chip status" style="--c:' + esc(s.color) + '" data-act="fStatus" data-v="' + esc(s.name) + '" aria-pressed="' + (f.status === s.name) + '"><i class="dot"></i>' + esc(statusLabel(s.name)) + ' ' + (counts[s.name] || 0) + '</button>';
     }).join('') +
     '<button class="chip" data-act="fStale" aria-pressed="' + f.stale + '">最終確認なし・長期未確認</button>';
-  setView((f.group ? '<div class="overview-selection"><span>' + esc(OVERVIEW_LABELS[f.group]) +
+  setView((shop ? '<h2 class="sec">' + esc(shop) + '</h2>' : '') +
+    (f.group ? '<div class="overview-selection"><span>' + esc(labels[f.group]) +
     '</span><button type="button" class="btn small" data-act="clearOverview" aria-label="ホームの絞り込みを解除">解除</button></div>' : '') +
     '<div class="search-row"><input type="search" id="listQ" placeholder="番号・店舗名で絞り込み" value="' + esc(f.q) + '" autocomplete="off"></div>' +
     '<details class="card overview-card list-filters"' + (f.status || f.stale ? ' open' : '') + '><summary>端末の状態・最終確認日で絞り込む</summary>' +
     '<div class="filters">' + chips + '</div></details>' +
-    '<select id="listLoc" aria-label="設置場所で絞り込み"><option value="">すべての場所</option>' +
-    locList.map(function (l) { return '<option value="' + esc(l) + '"' + (f.loc === l ? ' selected' : '') + '>' + esc(l || '（場所なし）') + '</option>'; }).join('') + '</select>' +
+    (hq ? '<select id="listLoc" aria-label="設置場所で絞り込み"><option value="">すべての場所</option>' +
+    locList.map(function (l) { return '<option value="' + esc(l) + '"' + (f.loc === l ? ' selected' : '') + '>' + esc(l || '（場所なし）') + '</option>'; }).join('') + '</select>' : '') +
     '<div id="listBody"></div>', '一覧');
   acts.fStatus = function (el) { f.status = el.getAttribute('data-v'); f.stale = false; f.limit = 80; render(); };
   acts.fStale = function () { f.stale = !f.stale; f.status = ''; f.limit = 80; render(); };
   acts.clearOverview = function () { f.group = ''; f.limit = 80; render(); };
   acts.more = function () { f.limit += 200; paintList(); };
   $('#listQ').addEventListener('input', function (e) { f.q = e.target.value; f.limit = 80; paintList(); });
-  $('#listLoc').addEventListener('change', function (e) { f.loc = e.target.value; f.limit = 80; paintList(); });
+  if (hq) $('#listLoc').addEventListener('change', function (e) { f.loc = e.target.value; f.limit = 80; paintList(); });
   paintList();
 };
 function paintList() {
   var f = st.listFilter;
   var qs = normSerial(f.q), qk = normKey(f.q);
   var rows = [];
-  var locations = f.group ? overviewLocations() : null;
+  var locations = !f.shop && f.group ? overviewLocations() : null;
   st.devices.forEach(function (d) {
-    if (f.group && !matchesOverview(d, f.group, locations)) return;
+    if (!matchesListScope(d, f, locations)) return;
     if (f.status && d.st !== f.status) return;
     if (f.stale && !isStale(d)) return;
     if (f.loc && d.l !== f.loc) return;
@@ -1931,7 +2088,7 @@ async function submitSave(payload, F) {
   if (r.result === 'saved') {
     cacheDevice(r.device);
     rememberStore(r.device.location);
-    addOp({ opId: r.opId, serial: r.device.serial, title: r.device.serial, op: r.op, at: Date.now(), undoable: r.undoable });
+    addOp({ opId: r.opId, serial: r.device.serial, location: r.device.location, title: r.device.serial, op: r.op, at: Date.now(), undoable: r.undoable });
     st.form = null;
     var params = { kind: 'save', serial: r.device.serial, op: r.op, opId: r.opId, undoable: r.undoable, device: r.device };
     if (topName() === 'form') go('done', params, { replace: true }); else go('done', params);
@@ -2232,7 +2389,7 @@ screens.invDone = function () {
     st.inv = null;
     saveInv();
     try { await loadBoot(); } catch (e) { /* 後で更新 */ }
-    addOp({ opId: r.opId, serial: '', title: '棚卸：' + loc, op: '確認' + r.counts.checked + '台', at: Date.now(), undoable: r.undoable });
+    addOp({ opId: r.opId, serial: '', location: loc, title: '棚卸：' + loc, op: '確認' + r.counts.checked + '台', at: Date.now(), undoable: r.undoable });
     go('done', { kind: 'inv', opId: r.opId, counts: r.counts, warnings: r.warnings, location: loc }, { root: true });
   };
 };
@@ -2241,7 +2398,7 @@ screens.invDone = function () {
  * 画面：設定
  * ========================================================= */
 screens.headOffice = function (p) {
-  setView('<div class="card"><h2 style="margin-top:0">本部専用の認証</h2><p class="body">廃棄の確定・廃棄済み端末の変更には、本部用の合言葉が必要です。通常の店舗用合言葉とは別です。</p>' +
+  setView('<div class="card"><h2 style="margin-top:0">本部専用の認証</h2><p class="body">全店の稼働・契約状況の表示や廃棄の記録には、本部用の合言葉が必要です。</p>' +
     (p.message ? '<p class="hint warn-text">' + esc(p.message) + '</p>' : '') +
     '<form id="hqForm"><label class="field"><span>本部用の合言葉</span><input id="hqPass" type="password" autocomplete="off" required></label>' +
     '<button type="submit" class="btn primary">本部として認証する</button></form>' +
@@ -2296,7 +2453,7 @@ screens.settings = function () {
     modes.map(function (m) { return '<button class="chip" data-act="mode" data-v="' + m.value + '" aria-pressed="' + (st.scanMode === m.value) + '"><span>' + esc(m.label) + '<small>' + esc(m.sub) + '</small></span></button>'; }).join('') +
     '</div><p class="hint" style="margin-bottom:0">いまの方法：' + (scanMode() === 'live' ? 'かざして読み取る' : '撮影して読み取る') + (Decoder.engine ? '（' + esc(Decoder.engine) + '）' : '') + '</p></div>' +
     installCardHtml() +
-    '<div class="card"><div class="label">本部専用の操作</div><p class="hint">廃棄の確定・廃棄済み端末の変更には本部認証が必要です。</p>' +
+    '<div class="card"><div class="label">本部専用の操作</div><p class="hint">全店の稼働・契約状況の表示や廃棄の記録には、本部認証が必要です。</p>' +
     (isHeadOffice() ? '<p class="hint">本部認証中（' + esc(fmtDate(st.hqExpiresAt)) + 'まで）</p><button class="btn" data-act="hqLogout">本部認証を終了する</button>' : '<button class="btn" data-act="hqLogin">本部として認証する</button>') + '</div>' +
     '<div class="stack"><button class="btn" data-act="refresh">' + I.refresh + '最新の情報にする</button>' +
     '<button class="btn" data-act="testScan">' + I.camera + '読み取り機能を準備・確認する</button>' +
@@ -2356,7 +2513,11 @@ $('#tabSettings').addEventListener('click', function () { go('settings'); });
 $('#tabScan').addEventListener('click', function () { globalActs.scan(); });
 if (MODE === 'gas' && google.script.history && google.script.history.setChangeHandler) google.script.history.setChangeHandler(onHistoryBack);
 else window.addEventListener('popstate', onHistoryBack);
-document.addEventListener('visibilitychange', function () { if (!document.hidden) refreshBootQuietly(); });
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden) return;
+  if (st.hqToken && st.hqExpiresAt <= Date.now()) expireHeadOffice();
+  refreshBootQuietly();
+});
 
 /* PWA: Service Worker 登録とインストール促進 */
 if ('serviceWorker' in navigator) {
