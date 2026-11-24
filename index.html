@@ -94,12 +94,22 @@ button.note{font:inherit;cursor:pointer}
 .badge{display:inline-flex;align-items:center;gap:6px;padding:1px 10px 1px 8px;border-radius:999px;background:var(--bg);border:1px solid var(--line);font-size:13px;font-weight:700;white-space:nowrap;color:var(--ink)}
 .badge i{width:10px;height:10px;border-radius:50%;background:var(--c);flex:0 0 auto}
 .pill{display:inline-flex;align-items:center;padding:6px 16px;border-radius:999px;background:var(--c);color:#fff;font-weight:800;font-size:17px}
-.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.stat{display:flex;align-items:center;gap:8px;min-height:52px;padding:8px 12px;border-radius:14px;border:1px solid var(--line);background:var(--card);text-align:left;box-shadow:var(--shadow)}
-.stat i{width:12px;height:12px;border-radius:50%;background:var(--c);flex:0 0 auto}
-.stat span{flex:1;font-size:13px;line-height:1.3;color:var(--sub)}
-.stat b{font-size:20px;font-variant-numeric:tabular-nums}
-.stat.zero b{color:var(--muted);font-weight:500}
+.overview-card{padding:0}
+.overview-row{display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:8px 14px;border:0;border-bottom:1px solid var(--line);background:none;text-align:left;font-size:14px}
+.overview-row:first-child{border-radius:var(--radius) var(--radius) 0 0}
+.overview-row:last-child{border:0;border-radius:0 0 var(--radius) var(--radius)}
+.overview-row:active{background:var(--bg)}
+.overview-row span:first-child{flex:1;min-width:0;font-weight:700}
+.overview-row b{white-space:nowrap;font-variant-numeric:tabular-nums}
+.overview-row .i{width:16px;height:16px;color:var(--muted)}
+.overview-row.zero b{color:var(--muted)}
+.overview-row.review{background:var(--warn-bg);color:var(--warn)}
+.overview-more summary,.list-filters summary{padding:10px 14px;min-height:44px;font-size:14px;font-weight:700;cursor:pointer;color:var(--sub)}
+.overview-more[open] summary{border-bottom:1px solid var(--line)}
+.list-filters{margin-top:10px}
+.list-filters .filters{padding:0 12px 12px}
+.overview-selection{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:0 0 10px;padding:4px 10px 4px 14px;border-radius:12px;background:var(--info-bg);font-size:14px;font-weight:700}
+.row-contract-label{font-weight:700}
 
 /* lists */
 .list{padding:4px 0}
@@ -306,7 +316,7 @@ var CONFIG = Object.assign({
   FORCE_POLYFILL: false
 }, window.ITV_CONFIG || {});
 
-var APP_VERSION = '2.2.2';
+var APP_VERSION = '2.2.3';
 var IS_GAS = !!(window.google && google.script && google.script.run);
 var MODE = IS_GAS ? 'gas' : (CONFIG.API_URL ? 'web' : (window.__MOCK_API__ ? 'mock' : 'none'));
 var SERIAL_RE = /^[A-Z0-9\-_.\/+]{1,40}$/;
@@ -631,6 +641,60 @@ function rememberStore(name) {
 }
 function storeNames() { return st.boot.stores.map(function (s) { return s.name; }); }
 
+/* ---------- ホームと一覧で使う区分 ---------- */
+var OVERVIEW_LABELS = {
+  'contract:planned': '解約予定（未申請）', 'contract:requested': '解約申請中', 'contract:ended': '解約済み',
+  'contract:unknown': '契約未確認', 'contract:active': '契約中', 'contract:excluded': '契約対象外', 'contract:other': 'その他の契約状況',
+  'device:shopActive': '店舗稼働中', 'device:shopFault': '店舗故障', 'device:hq': '本部預かり',
+  'device:stored': '未使用・保管', 'device:disposalPlanned': '廃棄予定', 'device:disposed': '廃棄済み',
+  'device:ended': '利用終了', 'device:unverified': '状態未確認', 'device:other': 'その他の状態',
+  review: '廃棄済み・要契約確認'
+};
+
+function contractGroup(value) {
+  switch (normKey(value)) {
+    case '解約予定': case '解約予定(未申請)': case '解約未申請': return 'contract:planned';
+    case '解約申請中': return 'contract:requested';
+    case '解約済': case '解約済み': return 'contract:ended';
+    case '契約中': return 'contract:active';
+    case '契約なし': case '契約対象外': case '対象外': return 'contract:excluded';
+    case '': case '未確認': case '未記録': case '契約未確認': return 'contract:unknown';
+    default: return 'contract:other';
+  }
+}
+function contractLabel(value) {
+  return contractGroup(value) === 'contract:ended' ? '解約済み' : String(value || '').trim() || '未記録';
+}
+function overviewLocations() {
+  var map = new Map(st.boot.stores.map(function (s) { return [normKey(s.name), normKey(s.group)]; }));
+  var home = normKey(st.boot.settings.homeLocation);
+  if (home) map.set(home, '本部');
+  return map;
+}
+function deviceGroup(d, locations) {
+  var status = normKey(d.st);
+  var kind = kindOf(d.st);
+  if (status === '廃棄' || status === '廃棄済' || status === '廃棄済み') return 'device:disposed';
+  if (status === '廃棄予定') return 'device:disposalPlanned';
+  if (kind === '終了') return 'device:ended';
+  if (!status || status === '未確認' || status === '未確認(PISTA取込)') return 'device:unverified';
+  if (kind === '移動' || kind === '不明' || kind === '修理') return 'device:other';
+  var place = locations.get(normKey(d.l));
+  if (place === '本部' && (kind === '正常' || kind === '故障' || kind === '保管')) return 'device:hq';
+  if (place === '店舗' && kind === '正常') return 'device:shopActive';
+  if (place === '店舗' && kind === '故障') return 'device:shopFault';
+  if (kind === '保管') return 'device:stored';
+  return 'device:other';
+}
+function needsContractReview(device, contract) {
+  return device === 'device:disposed' && contract !== 'contract:ended' && contract !== 'contract:excluded';
+}
+function matchesOverview(d, group, locations) {
+  if (group === 'review') return needsContractReview(deviceGroup(d, locations), contractGroup(d.c));
+  if (group.indexOf('contract:') === 0) return contractGroup(d.c) === group;
+  return deviceGroup(d, locations) === group;
+}
+
 /* =========================================================
  * 画面遷移
  * ========================================================= */
@@ -710,8 +774,7 @@ var globalActs = {
   resumeInv: function () { go('inv'); },
   scan: function () { startScan(); },
   refresh: function () { run(loadBoot, '最新の情報を読み込み中…').then(function () { render(); toast('最新の情報にしました'); }, function () {}); },
-  listStatus: function (el) { st.listFilter = null; go('list', { status: el.getAttribute('data-status') }); },
-  listStale: function () { st.listFilter = null; go('list', { stale: true }); }
+  listOverview: function (el) { st.listFilter = null; go('list', { group: el.getAttribute('data-group') }); }
 };
 
 /* =========================================================
@@ -1276,9 +1339,6 @@ screens.error = function (p) {
  * ========================================================= */
 screens.home = function () {
   var b = st.boot;
-  var counts = {};
-  var stale = 0;
-  st.devices.forEach(function (d) { counts[d.st] = (counts[d.st] || 0) + 1; if (isStale(d)) stale++; });
   var photo = scanMode() !== 'live';
   var html = '<p class="hello">' + esc(st.user) + ' さん</p>';
   if (MODE === 'mock') html += '<div class="note warn">' + I.alert + '<div><b>デモモード</b>：記録は保存されません。再読み込みすると初期状態に戻ります。</div></div>';
@@ -1295,16 +1355,40 @@ screens.home = function () {
     '<label class="btn" for="pickInput">' + I.image + '写真から読む</label></div>';
   html += '<div class="row2"><button class="btn" data-act="goInv">' + I.clipboard + '棚卸</button>' +
     '<button class="btn" data-act="goList">' + I.list + '一覧を見る</button></div>';
-  html += '<h2 class="sec">いまの状況<small>全' + st.devices.size + '台</small></h2><div class="stats">';
-  b.statuses.forEach(function (s) {
-    var n = counts[s.name] || 0;
-    html += '<button class="stat' + (n ? '' : ' zero') + '" data-act="listStatus" data-status="' + esc(s.name) + '" style="--c:' + esc(s.color) + '"><i></i><span>' + esc(statusLabel(s.name)) + '</span><b>' + n + '</b></button>';
-  });
-  html += '<button class="stat' + (stale ? '' : ' zero') + '" data-act="listStale" style="--c:#b45309"><i></i><span>未確認・<br>長期未確認</span><b>' + stale + '</b></button></div>';
+  html += overviewHtml();
   html += recentOpsHtml();
   html += '<p class="foot">v' + APP_VERSION + '・<button class="linklike" data-act="refresh">' + I.refresh + '最新の情報にする</button></p>';
   setView(html, appName());
 };
+
+function overviewHtml() {
+  var locations = overviewLocations();
+  var counts = Object.create(null);
+  st.devices.forEach(function (d) {
+    var contract = contractGroup(d.c);
+    var device = deviceGroup(d, locations);
+    counts[contract] = (counts[contract] || 0) + 1;
+    counts[device] = (counts[device] || 0) + 1;
+    if (needsContractReview(device, contract)) counts.review = (counts.review || 0) + 1;
+  });
+  function row(key) {
+    var n = counts[key] || 0;
+    return '<button class="overview-row' + (key === 'review' ? ' review' : '') + (n ? '' : ' zero') +
+      '" data-act="listOverview" data-group="' + esc(key) + '"><span>' + esc(OVERVIEW_LABELS[key]) +
+      '</span><b>' + n + '台</b>' + I.chevron + '</button>';
+  }
+  var contractRows = ['contract:requested', 'contract:ended'];
+  if (counts['contract:planned']) contractRows.unshift('contract:planned');
+  if (counts['contract:unknown']) contractRows.push('contract:unknown');
+  if (counts.review) contractRows.push('review');
+  var moreContracts = ['contract:active', 'contract:excluded', 'contract:other'].filter(function (key) { return counts[key]; });
+  var deviceRows = ['device:shopActive', 'device:shopFault', 'device:hq', 'device:stored', 'device:disposalPlanned',
+    'device:disposed', 'device:ended', 'device:unverified', 'device:other'].filter(function (key) { return counts[key]; });
+  return '<h2 class="sec">解約の進捗</h2><div class="card overview-card">' + contractRows.map(row).join('') +
+    (moreContracts.length ? '<details class="overview-more"><summary>契約の内訳を見る</summary>' + moreContracts.map(row).join('') + '</details>' : '') +
+    '</div><h2 class="sec">端末の状態<small>台帳上・全' + st.devices.size + '台</small></h2>' +
+    (deviceRows.length ? '<div class="card overview-card">' + deviceRows.map(row).join('') + '</div>' : '<p class="empty">台帳に端末がありません</p>');
+}
 
 function canUndo(o) { return o.undoable && !o.undone && st.boot && (Date.now() - o.at) < st.boot.settings.undoMinutes * 60000; }
 function addOp(o) {
@@ -1371,6 +1455,7 @@ function deviceRowHtml(d) {
   return '<button class="li" data-act="openSerial" data-serial="' + esc(d.s) + '">' +
     '<span class="li-top"><span class="mono">' + esc(d.s) + '</span>' + badge(d.st) + '</span>' +
     '<span class="li-sub">' + esc(d.l || '（場所なし）') + (d.p ? '・' + esc(d.p) : '') + (d.m ? '・' + esc(d.m) : '') + '</span>' +
+    '<span class="li-sub"><span class="row-contract-label">契約</span>　' + esc(contractLabel(d.c)) + '</span>' +
     '<span class="li-sub' + (stale ? ' warn-text' : '') + '">' + (d.ck ? '確認：' + esc(ago(d.ck)) + (d.cb ? '（' + esc(d.cb) + '）' : '') : 'まだ読み取り確認されていません') + '</span>' +
     '</button>';
 }
@@ -1379,27 +1464,36 @@ function deviceRowHtml(d) {
  * 画面：一覧
  * ========================================================= */
 screens.list = function (p) {
-  var f = st.listFilter = st.listFilter || { q: '', status: p.status || '', loc: '', stale: !!p.stale, limit: 80 };
-  var counts = {};
-  var locs = {};
-  st.devices.forEach(function (d) { counts[d.st] = (counts[d.st] || 0) + 1; locs[d.l] = 1; });
+  var f = st.listFilter = st.listFilter || { q: '', status: '', group: p.group || '', loc: '', stale: false, limit: 80 };
+  var counts = Object.create(null);
+  var locs = Object.create(null);
+  var locations = f.group ? overviewLocations() : null;
+  st.devices.forEach(function (d) {
+    if (f.group && !matchesOverview(d, f.group, locations)) return;
+    counts[d.st] = (counts[d.st] || 0) + 1;
+    locs[d.l] = 1;
+  });
   var order = storeNames();
   var locList = Object.keys(locs).sort(function (a, b) {
     var ia = order.indexOf(a), ib = order.indexOf(b);
     return (ia < 0 ? 9999 : ia) - (ib < 0 ? 9999 : ib) || (a < b ? -1 : 1);
   });
-  var chips = '<button class="chip" data-act="fStatus" data-v="" aria-pressed="' + (!f.status && !f.stale) + '">すべて</button>' +
+  var chips = '<button class="chip" data-act="fStatus" data-v="" aria-pressed="' + (!f.status && !f.stale) + '">すべての状態</button>' +
     st.boot.statuses.map(function (s) {
       return '<button class="chip status" style="--c:' + esc(s.color) + '" data-act="fStatus" data-v="' + esc(s.name) + '" aria-pressed="' + (f.status === s.name) + '"><i class="dot"></i>' + esc(statusLabel(s.name)) + ' ' + (counts[s.name] || 0) + '</button>';
     }).join('') +
-    '<button class="chip" data-act="fStale" aria-pressed="' + f.stale + '">未確認・長期未確認</button>';
-  setView('<div class="search-row"><input type="search" id="listQ" placeholder="番号・店舗名で絞り込み" value="' + esc(f.q) + '" autocomplete="off"></div>' +
-    '<div class="filters" style="margin-top:10px">' + chips + '</div>' +
+    '<button class="chip" data-act="fStale" aria-pressed="' + f.stale + '">最終確認なし・長期未確認</button>';
+  setView((f.group ? '<div class="overview-selection"><span>' + esc(OVERVIEW_LABELS[f.group]) +
+    '</span><button type="button" class="btn small" data-act="clearOverview" aria-label="ホームの絞り込みを解除">解除</button></div>' : '') +
+    '<div class="search-row"><input type="search" id="listQ" placeholder="番号・店舗名で絞り込み" value="' + esc(f.q) + '" autocomplete="off"></div>' +
+    '<details class="card overview-card list-filters"' + (f.status || f.stale ? ' open' : '') + '><summary>端末の状態・最終確認日で絞り込む</summary>' +
+    '<div class="filters">' + chips + '</div></details>' +
     '<select id="listLoc" aria-label="設置場所で絞り込み"><option value="">すべての場所</option>' +
     locList.map(function (l) { return '<option value="' + esc(l) + '"' + (f.loc === l ? ' selected' : '') + '>' + esc(l || '（場所なし）') + '</option>'; }).join('') + '</select>' +
     '<div id="listBody"></div>', '一覧');
   acts.fStatus = function (el) { f.status = el.getAttribute('data-v'); f.stale = false; f.limit = 80; render(); };
   acts.fStale = function () { f.stale = !f.stale; f.status = ''; f.limit = 80; render(); };
+  acts.clearOverview = function () { f.group = ''; f.limit = 80; render(); };
   acts.more = function () { f.limit += 200; paintList(); };
   $('#listQ').addEventListener('input', function (e) { f.q = e.target.value; f.limit = 80; paintList(); });
   $('#listLoc').addEventListener('change', function (e) { f.loc = e.target.value; f.limit = 80; paintList(); });
@@ -1409,7 +1503,9 @@ function paintList() {
   var f = st.listFilter;
   var qs = normSerial(f.q), qk = normKey(f.q);
   var rows = [];
+  var locations = f.group ? overviewLocations() : null;
   st.devices.forEach(function (d) {
+    if (f.group && !matchesOverview(d, f.group, locations)) return;
     if (f.status && d.st !== f.status) return;
     if (f.stale && !isStale(d)) return;
     if (f.loc && d.l !== f.loc) return;
@@ -1495,12 +1591,11 @@ function paintDevice() {
   var kind = info.kind;
   var normal = normalStatus();
   var needsHeadOffice = d.status === '廃棄' && !isHeadOffice();
-  var contract = String(d.contract || '').trim();
   html += '<div class="card">' +
     '<div class="serial">' + esc(d.serial) + '</div>' +
     '<div class="place">' + I.pin + '<span>' + esc(d.location || '（場所なし）') + (d.spot ? '<br><small style="font-weight:600;color:var(--muted)">' + esc(d.spot) + '</small>' : '') + '</span></div>' +
     '<dl class="device-summary"><div><dt>端末の状態</dt><dd>' + pill(d.status) + '</dd></div>' +
-    '<div><dt>契約状況</dt><dd>' + (contract ? esc(contract) : '未記録') + '</dd></div></dl>' +
+    '<div><dt>契約状況</dt><dd>' + esc(contractLabel(d.contract)) + '</dd></div></dl>' +
     (kind === '終了' ? '<p class="hint">棚卸の対象外です。返却や解約の状況は別途確認してください。</p>' : '') +
     '<dl class="kv">' +
     (d.symptom ? '<dt>症状</dt><dd>' + esc(d.symptom) + '</dd>' : '') +
