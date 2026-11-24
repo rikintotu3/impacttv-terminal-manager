@@ -95,15 +95,70 @@ button.note{font:inherit;cursor:pointer}
 .badge i{width:10px;height:10px;border-radius:50%;background:var(--c);flex:0 0 auto}
 .pill{display:inline-flex;align-items:center;padding:6px 16px;border-radius:999px;background:var(--c);color:#fff;font-weight:800;font-size:17px}
 .overview-card{padding:0}
-.overview-row{display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:8px 14px;border:0;border-bottom:1px solid var(--line);background:none;text-align:left;font-size:14px}
-.overview-row:first-child{border-radius:var(--radius) var(--radius) 0 0}
-.overview-row:last-child{border:0;border-radius:0 0 var(--radius) var(--radius)}
-.overview-row:active{background:var(--bg)}
-.overview-row span:first-child{flex:1;min-width:0;font-weight:700}
-.overview-row b{white-space:nowrap;font-variant-numeric:tabular-nums}
-.overview-row .i{width:16px;height:16px;color:var(--muted)}
-.overview-row.zero b{color:var(--muted)}
-.overview-row.review{background:var(--warn-bg);color:var(--warn)}
+.home-view{max-width:600px}
+.home-tools,.home-shortcuts{display:grid;gap:8px}
+.home-tools{margin-bottom:18px}
+.home-shortcuts{grid-template-columns:repeat(2,minmax(0,1fr))}
+.home-shortcuts .btn{min-height:44px;font-size:14px;box-shadow:none}
+.home-tools .btn.hero.scan{display:grid;grid-template-columns:auto auto;justify-content:center;column-gap:12px;row-gap:0;min-height:64px;margin:0;border-radius:16px;font-size:17px;line-height:1.4;box-shadow:none}
+.home-tools .scan .i{grid-row:span 2;width:26px;height:26px}
+.home-tools .scan span,.home-tools .scan small{text-align:left}
+.home-tools .scan small{font-size:12px}
+.overview-board{display:grid;gap:14px}
+.overview-board section{min-width:0;border-radius:20px;background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow)}
+.overview-board .overview-card{margin:0;border:none;border-radius:0;background:transparent;box-shadow:none}
+.overview-head{display:flex;align-items:center;gap:10px;min-height:72px;padding:14px 18px}
+.overview-head h2{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px;margin:0;color:var(--ink);font-size:18px;line-height:1.35}
+.overview-head small{font-size:13px;font-weight:600;color:var(--muted)}
+.contract-head{position:relative;isolation:isolate;overflow:hidden;border-radius:19px 19px 0 0;background:#dfedf6;color:#153550;min-height:110px;padding:17px 40% 17px 20px}
+.contract-head h2{display:grid;gap:5px;font-size:23px;color:inherit}
+.contract-head small{color:#3b5870}
+.contract-head::before{content:"";position:absolute;z-index:-1;right:-30px;top:-60px;width:200px;height:200px;border-radius:50%;background:#c6dfed}
+.contract-head img{position:absolute;right:clamp(12px,4%,25px);top:50%;transform:translateY(-50%) rotate(-3deg);width:35%;max-width:128px;height:98px;object-fit:contain;pointer-events:none}
+.overview-row{display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:8px 16px;border:0;background:transparent;color:var(--ink);text-align:left;font-size:14px}
+.overview-row+.overview-row,.overview-more{border-top:1px solid var(--line)}
+.overview-label{flex:1;min-width:0;font-weight:700;overflow-wrap:anywhere}
+.overview-row b{white-space:nowrap;font-size:19px;line-height:1.15;font-variant-numeric:tabular-nums}
+.overview-row .unit{margin-left:2px;font-size:12px;font-weight:600}
+.overview-mark{display:inline-grid;place-items:center;flex:none;width:30px;height:30px;border-radius:9px;color:var(--sub);background:var(--bg)}
+.overview-mark .i{width:17px;height:17px}
+.overview-row>.i{width:13px;height:13px;color:var(--muted)}
+.overview-row[data-group="device:shopActive"] .overview-mark{color:var(--ok);background:var(--ok-bg)}
+.overview-row[data-group="device:hq"] .overview-mark,.overview-device .overview-head>.overview-mark{background:var(--info-bg);color:var(--info)}
+.overview-row[data-group="device:shopFault"] .overview-mark{color:var(--danger);background:var(--danger-bg)}
+.overview-row[data-group="device:disposalPlanned"] .overview-mark,.review .overview-mark{color:var(--warn);background:var(--warn-bg)}
+.overview-board .contract-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 8px;padding:12px}
+.contract-body>.overview-row:not(.contract-stat),.contract-body>.overview-more{grid-column:1/-1}
+.overview-row.contract-stat{display:grid;grid-template-columns:auto 1fr;grid-template-areas:"symbol label" "count arrow";gap:8px 6px;padding:12px;border:1px solid var(--line);border-radius:13px;margin-bottom:8px;background:var(--bg)}
+.contract-stat .overview-mark{grid-area:symbol;width:18px;height:18px;background:transparent;color:inherit}
+.contract-stat .overview-label{grid-area:label;font-size:14px;line-height:1.4}
+.contract-stat b{grid-area:count;grid-column:1/-1;justify-self:start;padding-right:16px;font-size:30px}
+.contract-stat>.i{grid-area:arrow;justify-self:end;align-self:end;margin-bottom:4px}
+.contract-stat[data-group="contract:requested"]{background:#193f60;border-color:#193f60;color:#fff}
+.contract-stat[data-group="contract:requested"]>.i{color:#c7d9e7}
+.contract-body>.overview-row:not(.contract-stat){padding-inline:4px}
+.contract-body>.contract-stat+.overview-row:not(.contract-stat){border-top:0}
+.overview-device .overview-head{border-bottom:1px solid var(--line)}
+.overview-review .overview-head{padding-bottom:4px;min-height:42px}
+.overview-review .overview-head h2{font-size:15px}
+.overview-row.review{border-radius:0 0 20px 20px}
+.overview-row:focus-visible,.overview-more summary:focus-visible{outline-offset:-3px}
+@media (hover:hover){.overview-row:not(.contract-stat):hover,.overview-more summary:hover{background:var(--bg)}.overview-row.contract-stat:hover{box-shadow:inset 0 0 0 2px currentColor}}
+@media (min-width:760px){
+  .home-view{max-width:1024px;padding-inline:24px}
+  .home-tools{grid-template-columns:minmax(230px,1fr) 1.6fr}
+  .home-shortcuts{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .home-shortcuts .btn{flex-direction:column;gap:2px;padding:6px}
+  .overview-board{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto 1fr;align-items:start;gap:14px 18px}
+  .overview-device{grid-area:1/2/3/3}
+  .overview-review{grid-column:1}
+}
+@media (prefers-color-scheme:dark){
+  .contract-head{background:#233d50;color:#edf5fa}
+  .contract-head small{color:#c5d8e5}
+  .contract-head::before{background:#315369}
+  .contract-stat[data-group="contract:requested"]{background:#26567c;border-color:#537f9d}
+}
 .overview-more summary,.list-filters summary{padding:10px 14px;min-height:44px;font-size:14px;font-weight:700;cursor:pointer;color:var(--sub)}
 .overview-more[open] summary{border-bottom:1px solid var(--line)}
 .overview-subtotal{float:right;font-variant-numeric:tabular-nums;color:var(--ink)}
@@ -347,6 +402,13 @@ var I = {
   refresh: svg('<path d="M20 11a8 8 0 10-2.4 5.8"/><path d="M20 4.5V11h-6.5"/>'),
   repeat: svg('<path d="M4 12a8 8 0 0113.7-5.6L20 9"/><path d="M20 4v5h-5"/><path d="M20 12a8 8 0 01-13.7 5.6L4 15"/><path d="M4 20v-5h5"/>'),
   question: svg('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 114 2c-.9.6-1.5 1.1-1.5 2.2M12 17h.01"/>'),
+  screen: svg('<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M9 21h6m-3-4v4"/>'),
+  clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+  shop: svg('<path d="M4 10l2-6h12l2 6M5 11v9h14v-9M3 10h18M9 20v-6h5"/>'),
+  building: svg('<path d="M4 21h16M7 21V4h10v17M10 8h.01M14 8h.01M10 12h.01M14 12h.01M11 21v-4h2v4"/>'),
+  box: svg('<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v11h14V9m-9 4h4"/>'),
+  bin: svg('<path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/>'),
+  stop: svg('<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 12h6"/>'),
   chevron: svg('<path d="M9 5l7 7-7 7"/>')
 };
 
@@ -651,6 +713,13 @@ var OVERVIEW_LABELS = {
   'device:ended': '利用終了（廃棄以外）', 'device:unverified': '状態未確認', 'device:other': 'その他の状態',
   review: '廃棄済み・要契約確認'
 };
+var OVERVIEW_ICONS = {
+  'contract:planned': I.edit, 'contract:requested': I.clock, 'contract:ended': I.check,
+  'contract:unknown': I.question, 'contract:active': I.clipboard, 'contract:excluded': I.stop, 'contract:other': I.list,
+  'device:shopActive': I.shop, 'device:shopFault': I.alert, 'device:hq': I.building,
+  'device:stored': I.box, 'device:disposalPlanned': I.clock, 'device:disposed': I.bin,
+  'device:ended': I.stop, 'device:unverified': I.question, 'device:other': I.list, review: I.alert
+};
 
 function contractGroup(value) {
   switch (normKey(value)) {
@@ -736,6 +805,7 @@ function render() {
 }
 function setView(html, title) {
   var v = $('#view');
+  v.classList.toggle('home-view', topName() === 'home');
   v.innerHTML = html;
   $('#barTitle').textContent = title || appName();
   v.classList.remove('view-enter');
@@ -1350,12 +1420,11 @@ screens.home = function () {
   if (st.inv) {
     html += '<button class="note info" data-act="resumeInv">' + I.clipboard + '<div><b>棚卸の途中です</b><br>' + esc(st.inv.location) + '・' + st.inv.items.length + '台読み取り済み<br><u>続きから再開する</u></div></button>';
   }
-  html += scanButtonHtml('バーコードを読み取る', photo ? 'カメラで黄色いシールを撮影' : 'カメラをシールにかざす');
-  html += '<p class="tip">' + (photo ? '黄色いシール全体を大きく撮影（縦向きでもOK）' : '枠の中にシールが入ると自動で読み取ります') + '</p>';
-  html += '<div class="row2"><button class="btn" data-act="goSearch">' + I.keyboard + '番号で探す</button>' +
-    '<label class="btn" for="pickInput">' + I.image + '写真から読む</label></div>';
-  html += '<div class="row2"><button class="btn" data-act="goInv">' + I.clipboard + '棚卸</button>' +
-    '<button class="btn" data-act="goList">' + I.list + '一覧を見る</button></div>';
+  html += '<div class="home-tools">' + scanButtonHtml('バーコードを読み取る', photo ? '黄色いシール全体を大きく撮影' : '黄色いシールを枠に合わせると自動読取');
+  html += '<div class="home-shortcuts"><button class="btn" data-act="goSearch">' + I.keyboard + '番号で探す</button>' +
+    '<label class="btn" for="pickInput" role="button" tabindex="0">' + I.image + '写真から読む</label>' +
+    '<button class="btn" data-act="goInv">' + I.clipboard + '棚卸</button>' +
+    '<button class="btn" data-act="goList">' + I.list + '一覧を見る</button></div></div>';
   html += overviewHtml();
   html += recentOpsHtml();
   html += '<p class="foot">v' + APP_VERSION + '・<button class="linklike" data-act="refresh">' + I.refresh + '最新の情報にする</button></p>';
@@ -1373,28 +1442,34 @@ function overviewHtml() {
     counts[device] = (counts[device] || 0) + 1;
     if (needsContractReview(device, contract)) reviewCount++;
   });
+  function mark(icon) { return '<span class="overview-mark" aria-hidden="true">' + icon + '</span>'; }
   function row(key) {
     var n = key === 'review' ? reviewCount : (counts[key] || 0);
-    return '<button class="overview-row' + (key === 'review' ? ' review' : '') + (n ? '' : ' zero') +
-      '" data-act="listOverview" data-group="' + esc(key) + '"><span>' + esc(OVERVIEW_LABELS[key]) +
-      '</span><b>' + n + '台</b>' + I.chevron + '</button>';
+    var isStat = key === 'contract:requested' || key === 'contract:ended';
+    return '<button class="overview-row' + (isStat ? ' contract-stat' : '') + (key === 'review' ? ' review' : '') +
+      '" data-act="listOverview" data-group="' + esc(key) + '">' + mark(OVERVIEW_ICONS[key]) +
+      '<span class="overview-label">' + esc(OVERVIEW_LABELS[key]) + '</span><b>' + n +
+      '<span class="unit">台</span></b>' + I.chevron + '</button>';
   }
   var contractRows = ['contract:requested', 'contract:ended'];
-  if (counts['contract:planned']) contractRows.unshift('contract:planned');
+  if (counts['contract:planned']) contractRows.push('contract:planned');
   if (counts['contract:unknown']) contractRows.push('contract:unknown');
   var moreContracts = ['contract:active', 'contract:excluded', 'contract:other'].filter(function (key) { return counts[key]; });
   var otherCount = moreContracts.reduce(function (sum, key) { return sum + counts[key]; }, 0);
   var deviceRows = ['device:shopActive', 'device:shopFault', 'device:hq', 'device:stored', 'device:disposalPlanned',
     'device:disposed', 'device:ended', 'device:unverified', 'device:other'].filter(function (key) { return counts[key]; });
   var total = '<small>全' + st.devices.size + '台</small>';
-  return '<section aria-labelledby="contractOverviewTitle"><h2 class="sec" id="contractOverviewTitle">契約状況' + total +
-    '</h2><div class="card overview-card">' + contractRows.map(row).join('') +
+  return '<div class="overview-board"><section aria-labelledby="contractOverviewTitle"><div class="overview-head contract-head">' +
+    '<h2 id="contractOverviewTitle">契約状況' + total + '</h2><img src="illustrations/impacttv-terminal.webp" alt="" width="128" height="98"></div>' +
+    '<div class="card overview-card contract-body">' + contractRows.map(row).join('') +
     (otherCount ? '<details class="overview-more"><summary>ほかの契約区分<b class="overview-subtotal">' + otherCount + '台</b></summary>' +
       moreContracts.map(row).join('') + '</details>' : '') +
-    '</div></section><section aria-labelledby="deviceOverviewTitle"><h2 class="sec" id="deviceOverviewTitle">端末の状態・場所' + total + '</h2>' +
+    '</div></section><section class="overview-device" aria-labelledby="deviceOverviewTitle"><div class="overview-head">' +
+    mark(I.screen) + '<h2 id="deviceOverviewTitle">端末の状態・場所' + total + '</h2></div>' +
     (deviceRows.length ? '<div class="card overview-card">' + deviceRows.map(row).join('') + '</div>' : '<p class="empty">台帳に端末がありません</p>') +
-    '</section>' + (reviewCount ? '<section aria-labelledby="reviewOverviewTitle"><h2 class="sec" id="reviewOverviewTitle">要確認<small>内訳から再掲</small></h2>' +
-      '<div class="card overview-card">' + row('review') + '</div></section>' : '');
+    '</section>' + (reviewCount ? '<section class="overview-review" aria-labelledby="reviewOverviewTitle"><div class="overview-head">' +
+      '<h2 id="reviewOverviewTitle">要確認<small>内訳から再掲</small></h2></div><div class="card overview-card">' +
+      row('review') + '</div></section>' : '') + '</div>';
 }
 
 function canUndo(o) { return o.undoable && !o.undone && st.boot && (Date.now() - o.at) < st.boot.settings.undoMinutes * 60000; }

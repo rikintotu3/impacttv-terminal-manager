@@ -8,6 +8,7 @@ const PRECACHE = [
   'manifest.webmanifest',
   'config.js',
   'demo.js',
+  'illustrations/impacttv-terminal.webp',
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/maskable-512.png',
