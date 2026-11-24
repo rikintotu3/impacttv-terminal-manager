@@ -99,7 +99,10 @@ button.note{font:inherit;cursor:pointer}
 .store-picker{padding:14px 16px}
 .store-picker label{display:block;margin-bottom:5px;font-size:14px;font-weight:700}
 .store-picker-field{display:flex;align-items:center;gap:8px}
-.store-picker input{flex:1;min-width:0}
+.store-picker-field input{flex:1;min-width:0}
+.store-picker-field .btn{flex-shrink:0}
+.login-shop{margin-bottom:14px}
+.login-roles{display:block;margin:10px auto 0}
 .shop-options{max-height:220px;overflow:auto;margin-top:8px}
 .shop-options .overview-row{font-weight:600;min-height:44px}
 .shop-options .overview-row .i{margin-left:auto}
@@ -487,6 +490,7 @@ function readHeadOfficeSession() {
 }
 var headOfficeSession = readHeadOfficeSession();
 var headOfficeExpiryTimer;
+var pendingStartSerial = '';
 
 /* ---------- 状態 ---------- */
 var st = {
@@ -527,6 +531,12 @@ function expireHeadOffice() {
   setHeadOfficeSession('', 0);
   st.listFilter = null;
   if (['home', 'list', 'settings', 'search'].indexOf(topName()) >= 0) render();
+}
+function clearLoginSession() {
+  setHeadOfficeSession('', 0);
+  st.token = '';
+  st.boot = null;
+  store.del('token');
 }
 function isHeadOffice() {
   return !!(st.hqToken && st.hqExpiresAt > Date.now() && st.boot && st.boot.headOfficeAuthorized);
@@ -571,7 +581,8 @@ function apiCommunicationError(code, action, status, retryable, detail) {
 function validApiData(action, data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
   if (action === 'login') return typeof data.token === 'string' && data.token.length > 0;
-  if (action === 'bootstrap') return !!(data.settings && typeof data.settings === 'object' && !Array.isArray(data.settings) && Array.isArray(data.devices) && Array.isArray(data.statuses));
+  if (action === 'bootstrap') return !!(data.settings && typeof data.settings === 'object' && !Array.isArray(data.settings) &&
+    Array.isArray(data.devices) && Array.isArray(data.statuses) && Array.isArray(data.stores));
   if (action === 'getDevice') return (data.device === null || !!(data.device && typeof data.device === 'object' && !Array.isArray(data.device))) && Array.isArray(data.history);
   return true;
 }
@@ -666,8 +677,7 @@ var ERROR_TITLES = {
 };
 function handleError(e) {
   if (e.code === 'AUTH') {
-    setHeadOfficeSession('', 0);
-    st.token = ''; store.del('token');
+    clearLoginSession();
     go('login', { message: e.message }, { root: true });
     return;
   }
@@ -793,6 +803,21 @@ function homeShopNames() {
   });
   return Array.from(shops.values());
 }
+function matchingShops(names, query) {
+  var key = normKey(query);
+  return names.filter(function (name) { return normKey(name).indexOf(key) >= 0; });
+}
+function shopOptionsHtml(names, locations, action, hasShops) {
+  return names.map(function (name) {
+    return '<button type="button" class="overview-row" data-act="' + action + '" data-name="' + esc(name) + '"><span class="overview-label">' +
+      esc(name) + (locations.get(normKey(name)) === PROVISIONAL_SHOP_GROUP ? ' <small>（暫定）</small>' : '') + '</span>' + I.chevron + '</button>';
+  }).join('') || '<p class="hint" role="status">' + (hasShops ? '一致する店舗がありません' : '選択できる店舗がありません。本部にご確認ください。') + '</p>';
+}
+function selectHomeShop(name) {
+  st.homeShop = name;
+  store.set('homeShop', name);
+  st.listFilter = null;
+}
 var PROVISIONAL_SHOP_GROUP = normKey('PISTAグループ（暫定）');
 var STORE_GROUPS = { 'device:shopActive': '稼働中', 'device:shopFault': '故障', 'store:other': 'その他の状態' };
 function storeGroup(d) {
@@ -855,7 +880,7 @@ function render() {
   acts = {};
   var noNav = t.name === 'login' || t.name === 'error';
   $('#btnBack').hidden = st.stack.length <= 1 || noNav;
-  $('#btnSettings').hidden = noNav || t.name === 'settings';
+  $('#btnSettings').hidden = noNav || t.name === 'settings' || (t.name === 'headOffice' && t.params.fromLogin);
   $('#demoPill').hidden = MODE !== 'mock';
   var tabOn = !noNav && ['home', 'search', 'list', 'settings'].indexOf(t.name) >= 0;
   document.body.classList.toggle('tabbar-on', tabOn);
@@ -1411,48 +1436,99 @@ document.addEventListener('keydown', function (e) {
  * ========================================================= */
 screens.login = function (p) {
   var needPass = !st.token;
+  var ready = !!(st.token && st.boot);
   setView(
-    '<div class="card center" style="padding:24px 16px">' +
-      '<img src="icons/icon-192.png" alt="" width="72" height="72" style="border-radius:18px" onerror="this.style.display=\'none\'">' +
-      '<h1 style="font-size:22px;margin:12px 0 6px">' + esc(appName()) + '</h1>' +
-      '<p class="hint" style="margin:0">impactTVの黄色いシールを読み取って、<br>状態や設置場所を記録します。</p>' +
-      '<p class="hint" style="margin:8px 0 0;color:var(--sub);font-weight:600">スマホのブラウザで、そのまま使えます</p>' +
+    '<div class="card center" style="padding:16px">' +
+      '<img src="icons/icon-192.png" alt="" width="48" height="48" style="border-radius:12px" onerror="this.style.display=\'none\'">' +
+      '<h1 style="font-size:22px;margin:6px 0">' + esc(appName()) + '</h1>' +
+      '<p class="hint" style="margin:0">自分の店舗を選んで、端末を確認します。</p>' +
     '</div>' +
     (p.message ? '<div class="note warn">' + I.alert + '<div>' + esc(p.message) + '</div></div>' : '') +
     (MODE === 'mock' ? '<div class="note warn">' + I.alert + '<div><b>デモモードです</b><br>合言葉は <b>kaino</b> です。記録は保存されず、再読み込みで元に戻ります。</div></div>' : '') +
     '<form class="card" id="loginForm" autocomplete="off" novalidate>' +
-      (needPass ? '<label class="field"><span>合言葉</span><input id="inPass" type="password" autocapitalize="off" autocomplete="current-password" placeholder="本部から伝えられた合言葉"></label>' : '') +
+      (needPass ? '<label class="field" id="loginPassField"><span>合言葉</span><input id="inPass" type="password" autocapitalize="off" autocomplete="current-password" placeholder="本部から伝えられた合言葉"></label>' : '') +
       '<label class="field"><span>お名前</span><input id="inName" type="text" maxlength="20" placeholder="例：山田" value="' + esc(st.user) + '" autocomplete="name"></label>' +
-      '<p class="hint">お名前は「誰が記録したか」を残すために使います。この端末に保存されます。</p>' +
+      '<div class="login-shop"><label for="loginShopQ" class="label">店舗名</label><div class="store-picker-field">' +
+      '<input id="loginShopQ" type="search" autocomplete="off" aria-controls="loginShopOptions" placeholder="店舗名を入力" value="' + esc(ready ? st.homeShop : '') + '">' +
+      '<button type="button" class="btn small" data-act="showLoginShops">一覧から選ぶ</button></div>' +
+      '<div class="shop-options" id="loginShopOptions" role="group" aria-label="店舗候補" hidden></div></div>' +
       '<button class="btn primary" type="submit">はじめる</button>' +
-    '</form>', 'ようこそ');
+      '<button class="linklike login-roles" type="button" data-act="loginHQ">本部として入る</button>' +
+    '</form>', 'ログイン');
   var form = $('#loginForm');
   var submitting = false;
   var passInput = needPass ? $('#inPass') : null;
-  setTimeout(function () { var f = needPass ? $('#inPass') : $('#inName'); if (f && !f.value) f.focus(); }, 80);
-  form.addEventListener('submit', async function (e) {
-    e.preventDefault();
+  var nameInput = $('#inName'), shopInput = $('#loginShopQ'), options = $('#loginShopOptions');
+  var submitButton = form.querySelector('button[type="submit"]');
+  function draw(query) {
+    if (!ready) return;
+    var names = homeShopNames();
+    options.innerHTML = shopOptionsHtml(matchingShops(names, query), overviewLocations(), 'loginShop', names.length);
+    options.hidden = false;
+  }
+  if (ready && !st.homeShop && !isHeadOffice()) draw('');
+  shopInput.addEventListener('input', function () { draw(shopInput.value); });
+  shopInput.addEventListener('focus', function () { if (options.hidden) draw(shopInput.value); });
+  shopInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { options.hidden = true; return; }
+    if (e.key !== 'ArrowDown' || !ready) return;
+    if (options.hidden) draw(shopInput.value);
+    var first = options.querySelector('button');
+    if (first) { e.preventDefault(); first.focus(); }
+  });
+  setTimeout(function () { var f = needPass ? passInput : nameInput; if (!f.value) f.focus(); }, 80);
+  async function proceed(action) {
     if (submitting) return;
-    var name = $('#inName').value.trim();
+    var name = nameInput.value.trim();
     if (!st.token && passInput && !passInput.value.trim()) { toast('合言葉を入力してください'); passInput.focus(); return; }
-    if (!name) { toast('お名前を入力してください'); $('#inName').focus(); return; }
+    if (!name) { toast('お名前を入力してください'); nameInput.focus(); return; }
     submitting = true;
-    var submitButton = form.querySelector('button[type="submit"]');
     submitButton.disabled = true;
     st.user = name;
     store.set('user', name);
     try {
       if (!st.token) {
         await run(function () { return login(passInput ? passInput.value : ''); }, '合言葉を確認しています…');
-        if (passInput) passInput.value = '';
+        passInput.value = '';
+        $('#loginPassField').hidden = true;
       }
-      await run(loadBoot, '読み込み中…');
+      if (!ready || (action === 'list' && !homeShopNames().length)) {
+        await run(loadBoot, '読み込み中…');
+        ready = true;
+      }
     } catch (err) { return; }
     finally { submitting = false; submitButton.disabled = false; }
-    go('home', null, { root: true });
-    Decoder.ready().catch(function () {});
+    if (action === 'hq' && !isHeadOffice()) { go('headOffice', { fromLogin: true }); return; }
+    if (isHeadOffice()) { enterHome(); return; }
+    var exact = homeShopNames().find(function (name) { return normKey(name) === normKey(shopInput.value); });
+    if (action === 'enter' && exact) { selectHomeShop(exact); enterHome(); return; }
+    draw(action === 'list' ? '' : shopInput.value);
+    var first = options.querySelector('button');
+    if (first) first.focus();
+    else { shopInput.focus(); shopInput.select(); }
+  }
+  acts.showLoginShops = function () { return proceed('list'); };
+  acts.loginHQ = function () { return proceed('hq'); };
+  acts.loginShop = function (el) {
+    var name = el.getAttribute('data-name');
+    if (submitting || !ready || homeShopNames().indexOf(name) < 0) return;
+    shopInput.value = name;
+    return proceed('enter');
+  };
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    return proceed('enter');
   });
 };
+function enterHome() {
+  go('home', null, { root: true });
+  if (pendingStartSerial) {
+    var serial = pendingStartSerial;
+    pendingStartSerial = '';
+    openSerial(serial);
+  }
+  setTimeout(function () { Decoder.ready().catch(function () {}); }, 1200);
+}
 async function login(pass) {
   var r = await api('login', { passcode: pass });
   st.token = r.token;
@@ -1464,14 +1540,18 @@ screens.error = function (p) {
     '<div class="stack"><button class="btn primary" data-act="retry">' + I.refresh + 'もう一度読み込む</button>' +
     '<button class="btn" data-act="relogin">合言葉を入力し直す</button></div>', appName());
   acts.retry = function () { if (p.reload) location.reload(); else start(); };
-  acts.relogin = function () { setHeadOfficeSession('', 0); st.token = ''; store.del('token'); go('login', {}, { root: true }); };
+  acts.relogin = function () { clearLoginSession(); go('login', {}, { root: true }); };
 };
 
 /* =========================================================
  * 画面：ホーム
  * ========================================================= */
 screens.home = function () {
-  if (!isHeadOffice()) { paintStoreHome(); return; }
+  if (!isHeadOffice()) {
+    if (!st.homeShop) go('login', {}, { root: true });
+    else paintStoreHome();
+    return;
+  }
   var b = st.boot;
   var html = '<p class="hello">' + esc(st.user) + ' さん</p>';
   if (MODE === 'mock') html += '<div class="note warn">' + I.alert + '<div><b>デモモード</b>：記録は保存されません。再読み込みすると初期状態に戻ります。</div></div>';
@@ -1508,21 +1588,15 @@ function paintStoreHome() {
   setView(html + '</div>', appName());
   var input = $('#homeShopQ'), options = $('#homeShopOptions'), currentContent = $('#shopHomeContent');
   function hits() {
-    var q = normKey(input.value);
-    return names.filter(function (name) { return normKey(name).indexOf(q) >= 0; });
+    return matchingShops(names, input.value);
   }
   function draw(namesToShow) {
     options.hidden = false;
-    options.innerHTML = namesToShow.map(function (name) {
-      return '<button type="button" class="overview-row" data-act="homeShop" data-name="' + esc(name) + '"><span class="overview-label">' +
-        esc(name) + (locations.get(normKey(name)) === PROVISIONAL_SHOP_GROUP ? ' <small>（暫定）</small>' : '') + '</span>' + I.chevron + '</button>';
-    }).join('') || '<p class="hint" role="status">' + (names.length ? '一致する店舗がありません' : '選択できる店舗がありません。本部にご確認ください。') + '</p>';
+    options.innerHTML = shopOptionsHtml(namesToShow, locations, 'homeShop', names.length);
   }
   function choose(name) {
     if (names.indexOf(name) === -1) return;
-    st.homeShop = name;
-    store.set('homeShop', name);
-    st.listFilter = null;
+    selectHomeShop(name);
     render();
     $('#shopStatusTitle').focus();
   }
@@ -1938,7 +2012,10 @@ function initForm(p, d) {
   };
   if (p.type === 'report') f.status = statusByKind('故障') || f.status;
   if (p.type === 'move') { f.location = ''; f.moveState = (kindOf(d.status) === '正常' || kindOf(d.status) === '') ? 'installed' : 'keep'; }
-  if (p.type === 'new') f.status = normal;
+  if (p.type === 'new') {
+    f.status = normal;
+    if (!d && !isHeadOffice() && homeShopNames().indexOf(st.homeShop) >= 0) f.location = st.homeShop;
+  }
   if (p.type === 'dispose') f.status = disposalStatus();
   return f;
 }
@@ -2190,6 +2267,7 @@ function invExpected() {
 
 screens.invPick = function () {
   var names = storeNames();
+  var selected = !isHeadOffice() && names.indexOf(st.homeShop) >= 0 ? [st.homeShop] : [];
   var counts = {};
   st.devices.forEach(function (d) { if (invTargetKinds(kindOf(d.st))) counts[d.l] = (counts[d.l] || 0) + 1; });
   var html = '';
@@ -2203,7 +2281,7 @@ screens.invPick = function () {
   var draw = function (q) {
     var k = normKey(q);
     var recent = st.recentStores.filter(function (n) { return names.indexOf(n) >= 0; });
-    var list = k ? names.filter(function (n) { return normKey(n).indexOf(k) >= 0; }) : uniq(recent.concat(names));
+    var list = k ? matchingShops(names, q) : uniq(selected.concat(recent, names));
     $('#invStores').innerHTML = list.map(function (n) {
       return '<button class="btn left" data-act="startInv" data-name="' + esc(n) + '">' + I.pin + '<span class="grow">' + esc(n) + '</span><small style="color:var(--muted)">台帳 ' + (counts[n] || 0) + '台</small></button>';
     }).join('') || '<p class="empty">見つかりません</p>';
@@ -2415,7 +2493,8 @@ screens.headOffice = function (p) {
     setHeadOfficeSession(result.hqToken, result.expiresAt);
     try { await run(loadBoot, '最新の情報を読み込んでいます…'); } catch (err) { return; }
     if (!isHeadOffice()) { alertModal('認証を確認できませんでした', '時間をおいて、もう一度本部認証を行ってください。'); return; }
-    if (p.returnForm) go('form', p.returnForm, { replace: true });
+    if (p.fromLogin) enterHome();
+    else if (p.returnForm) go('form', p.returnForm, { replace: true });
     else if (p.returnSerial) { back(); openSerial(p.returnSerial); }
     else go('settings', {}, { replace: true });
     toast('本部として認証しました');
@@ -2490,8 +2569,7 @@ screens.settings = function () {
   };
   acts.logout = async function () {
     if (!(await confirmModal('ログアウトしますか？', '次に開くときに合言葉の入力が必要になります。', 'ログアウト'))) return;
-    setHeadOfficeSession('', 0);
-    st.token = ''; store.del('token');
+    clearLoginSession();
     go('login', {}, { root: true });
   };
 };
@@ -2590,6 +2668,7 @@ async function start() {
     }
   }
   var p = await readStartParams();
+  if (p.serial) pendingStartSerial = p.serial;
   if (p.key || p.serial) clearStartParams();
   if (p.key && !st.token) {
     try { await run(function () { return login(p.key); }, '合言葉を確認しています…'); } catch (e) { /* ログイン画面へ */ }
@@ -2605,10 +2684,8 @@ async function start() {
     return;
   }
   hideBusy();
-  if (!st.user) { go('login', {}, { root: true }); return; }
-  go('home', null, { root: true });
-  if (p.serial) openSerial(p.serial);
-  setTimeout(function () { Decoder.ready().catch(function () { /* 必要なときに再試行 */ }); }, 1200);
+  if (!st.user || (!isHeadOffice() && !st.homeShop)) { go('login', {}, { root: true }); return; }
+  enterHome();
 }
 
 window.ITV = { st: st, go: go, api: api, Decoder: Decoder, Live: Live, invAdd: invAdd, handleCodes: handleCodes, openSerial: openSerial, CONFIG: CONFIG, MODE: MODE };
