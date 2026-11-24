@@ -106,6 +106,7 @@ button.note{font:inherit;cursor:pointer}
 .overview-row.review{background:var(--warn-bg);color:var(--warn)}
 .overview-more summary,.list-filters summary{padding:10px 14px;min-height:44px;font-size:14px;font-weight:700;cursor:pointer;color:var(--sub)}
 .overview-more[open] summary{border-bottom:1px solid var(--line)}
+.overview-subtotal{float:right;font-variant-numeric:tabular-nums;color:var(--ink)}
 .list-filters{margin-top:10px}
 .list-filters .filters{padding:0 12px 12px}
 .overview-selection{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:0 0 10px;padding:4px 10px 4px 14px;border-radius:12px;background:var(--info-bg);font-size:14px;font-weight:700}
@@ -643,11 +644,11 @@ function storeNames() { return st.boot.stores.map(function (s) { return s.name; 
 
 /* ---------- ホームと一覧で使う区分 ---------- */
 var OVERVIEW_LABELS = {
-  'contract:planned': '解約予定（未申請）', 'contract:requested': '解約申請中', 'contract:ended': '解約済み',
-  'contract:unknown': '契約未確認', 'contract:active': '契約中', 'contract:excluded': '契約対象外', 'contract:other': 'その他の契約状況',
+  'contract:planned': '解約予定・未申請', 'contract:requested': '解約申請中', 'contract:ended': '解約済み',
+  'contract:unknown': '契約未確認', 'contract:active': '契約中', 'contract:excluded': '契約なし・対象外', 'contract:other': 'その他の契約状況',
   'device:shopActive': '店舗稼働中', 'device:shopFault': '店舗故障', 'device:hq': '本部預かり',
   'device:stored': '未使用・保管', 'device:disposalPlanned': '廃棄予定', 'device:disposed': '廃棄済み',
-  'device:ended': '利用終了', 'device:unverified': '状態未確認', 'device:other': 'その他の状態',
+  'device:ended': '利用終了（廃棄以外）', 'device:unverified': '状態未確認', 'device:other': 'その他の状態',
   review: '廃棄済み・要契約確認'
 };
 
@@ -1364,15 +1365,16 @@ screens.home = function () {
 function overviewHtml() {
   var locations = overviewLocations();
   var counts = Object.create(null);
+  var reviewCount = 0;
   st.devices.forEach(function (d) {
     var contract = contractGroup(d.c);
     var device = deviceGroup(d, locations);
     counts[contract] = (counts[contract] || 0) + 1;
     counts[device] = (counts[device] || 0) + 1;
-    if (needsContractReview(device, contract)) counts.review = (counts.review || 0) + 1;
+    if (needsContractReview(device, contract)) reviewCount++;
   });
   function row(key) {
-    var n = counts[key] || 0;
+    var n = key === 'review' ? reviewCount : (counts[key] || 0);
     return '<button class="overview-row' + (key === 'review' ? ' review' : '') + (n ? '' : ' zero') +
       '" data-act="listOverview" data-group="' + esc(key) + '"><span>' + esc(OVERVIEW_LABELS[key]) +
       '</span><b>' + n + '台</b>' + I.chevron + '</button>';
@@ -1380,14 +1382,19 @@ function overviewHtml() {
   var contractRows = ['contract:requested', 'contract:ended'];
   if (counts['contract:planned']) contractRows.unshift('contract:planned');
   if (counts['contract:unknown']) contractRows.push('contract:unknown');
-  if (counts.review) contractRows.push('review');
   var moreContracts = ['contract:active', 'contract:excluded', 'contract:other'].filter(function (key) { return counts[key]; });
+  var otherCount = moreContracts.reduce(function (sum, key) { return sum + counts[key]; }, 0);
   var deviceRows = ['device:shopActive', 'device:shopFault', 'device:hq', 'device:stored', 'device:disposalPlanned',
     'device:disposed', 'device:ended', 'device:unverified', 'device:other'].filter(function (key) { return counts[key]; });
-  return '<h2 class="sec">解約の進捗</h2><div class="card overview-card">' + contractRows.map(row).join('') +
-    (moreContracts.length ? '<details class="overview-more"><summary>契約の内訳を見る</summary>' + moreContracts.map(row).join('') + '</details>' : '') +
-    '</div><h2 class="sec">端末の状態<small>台帳上・全' + st.devices.size + '台</small></h2>' +
-    (deviceRows.length ? '<div class="card overview-card">' + deviceRows.map(row).join('') + '</div>' : '<p class="empty">台帳に端末がありません</p>');
+  var total = '<small>全' + st.devices.size + '台</small>';
+  return '<section aria-labelledby="contractOverviewTitle"><h2 class="sec" id="contractOverviewTitle">契約状況' + total +
+    '</h2><div class="card overview-card">' + contractRows.map(row).join('') +
+    (otherCount ? '<details class="overview-more"><summary>ほかの契約区分<b class="overview-subtotal">' + otherCount + '台</b></summary>' +
+      moreContracts.map(row).join('') + '</details>' : '') +
+    '</div></section><section aria-labelledby="deviceOverviewTitle"><h2 class="sec" id="deviceOverviewTitle">端末の状態・場所' + total + '</h2>' +
+    (deviceRows.length ? '<div class="card overview-card">' + deviceRows.map(row).join('') + '</div>' : '<p class="empty">台帳に端末がありません</p>') +
+    '</section>' + (reviewCount ? '<section aria-labelledby="reviewOverviewTitle"><h2 class="sec" id="reviewOverviewTitle">要確認<small>内訳から再掲</small></h2>' +
+      '<div class="card overview-card">' + row('review') + '</div></section>' : '');
 }
 
 function canUndo(o) { return o.undoable && !o.undone && st.boot && (Date.now() - o.at) < st.boot.settings.undoMinutes * 60000; }
