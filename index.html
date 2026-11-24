@@ -396,7 +396,7 @@ var CONFIG = Object.assign({
   FORCE_POLYFILL: false
 }, window.ITV_CONFIG || {});
 
-var APP_VERSION = '2.2.4';
+var APP_VERSION = '2.2.5';
 var IS_GAS = !!(window.google && google.script && google.script.run);
 var MODE = IS_GAS ? 'gas' : (CONFIG.API_URL ? 'web' : (window.__MOCK_API__ ? 'mock' : 'none'));
 var SERIAL_RE = /^[A-Z0-9\-_.\/+]{1,40}$/;
@@ -502,6 +502,7 @@ var st = {
   scanMode: store.get('scanMode', 'auto'),
   recentStores: store.get('recentStores', []),
   homeShop: store.get('homeShop', ''),
+  locationNames: new Map(),
   ops: store.get('ops', []),
   inv: store.get('inv', null),
   boot: null,
@@ -536,6 +537,7 @@ function clearLoginSession() {
   setHeadOfficeSession('', 0);
   st.token = '';
   st.boot = null;
+  st.locationNames.clear();
   store.del('token');
 }
 function isHeadOffice() {
@@ -583,7 +585,8 @@ function validApiData(action, data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
   if (action === 'login') return typeof data.token === 'string' && data.token.length > 0;
   if (action === 'bootstrap') return !!(data.settings && typeof data.settings === 'object' && !Array.isArray(data.settings) &&
-    Array.isArray(data.devices) && Array.isArray(data.statuses) && Array.isArray(data.stores));
+    Array.isArray(data.devices) && Array.isArray(data.statuses) && Array.isArray(data.stores) &&
+    (data.storeAliases === undefined || Array.isArray(data.storeAliases)));
   if (action === 'getDevice') return (data.device === null || !!(data.device && typeof data.device === 'object' && !Array.isArray(data.device))) && Array.isArray(data.history);
   if (action === 'pistaPreview' || action === 'pistaImport') {
     return ['total', 'added', 'updated', 'unchanged', 'newDevices'].every(function (k) { return Number.isSafeInteger(data[k]) && data[k] >= 0; }) &&
@@ -703,6 +706,7 @@ function handleError(e) {
 async function loadBoot() {
   var b = await api('bootstrap');
   st.boot = b;
+  st.locationNames = locationNameMap(b);
   if (!b.headOfficeAuthorized) setHeadOfficeSession('', 0);
   else {
     st.hqExpiresAt = Number(b.headOfficeExpiresAt) || st.hqExpiresAt;
@@ -710,7 +714,7 @@ async function loadBoot() {
     headOfficeExpiryTimer = setTimeout(expireHeadOffice, Math.max(0, st.hqExpiresAt - Date.now()));
   }
   if (st.homeShop) {
-    var savedShopKey = normKey(st.homeShop);
+    var savedShopKey = locationKey(st.homeShop);
     var validShop = homeShopNames().find(function (name) { return normKey(name) === savedShopKey; }) || '';
     if (validShop !== st.homeShop) { st.homeShop = validShop; store.set('homeShop', validShop); }
   }
@@ -764,7 +768,38 @@ function rememberStore(name) {
   st.recentStores = uniq([name].concat(st.recentStores)).slice(0, 6);
   store.set('recentStores', st.recentStores);
 }
-function storeNames() { return st.boot.stores.map(function (s) { return s.name; }); }
+function storeNames() {
+  return uniq(st.boot.stores.filter(function (s) {
+    return normKey(s.group).indexOf('PISTA') !== 0;
+  }).map(function (s) { return s.name; }));
+}
+function homeShopNames() {
+  if (!st.boot) return [];
+  var home = normKey(st.boot.settings.homeLocation);
+  return uniq(st.boot.stores.filter(function (s) {
+    return normKey(s.group) === '店舗' && normKey(s.name) !== home;
+  }).map(function (s) { return s.name; }));
+}
+function locationNameMap(boot) {
+  var official = new Map(homeShopNames().map(function (name) { return [normKey(name), name]; }));
+  var names = new Map(official);
+  var reserved = new Set(storeNames().map(normKey));
+  if (boot.settings.homeLocation) reserved.add(normKey(boot.settings.homeLocation));
+  (boot.storeAliases || []).forEach(function (entry) {
+    if (!entry || typeof entry.alias !== 'string' || typeof entry.name !== 'string') return;
+    var alias = normKey(entry.alias), name = official.get(normKey(entry.name));
+    if (!alias || !name || reserved.has(alias)) return;
+    names.set(alias, !names.has(alias) || names.get(alias) === name ? name : '');
+  });
+  return names;
+}
+function locationName(value) {
+  return (st.boot && st.locationNames.get(normKey(value))) || value || '';
+}
+function locationKey(value) { return normKey(locationName(value)); }
+function recentLocations(names) {
+  return uniq(st.recentStores.map(locationName)).filter(function (n) { return names.indexOf(n) >= 0; });
+}
 
 /* ---------- ホームと一覧で使う区分 ---------- */
 var OVERVIEW_LABELS = {
@@ -803,23 +838,14 @@ function overviewLocations() {
   if (home) map.set(home, '本部');
   return map;
 }
-function homeShopNames() {
-  var locations = overviewLocations(), shops = new Map();
-  storeNames().forEach(function (name) {
-    var key = normKey(name);
-    var group = locations.get(key);
-    if (key && (group === '店舗' || group === PROVISIONAL_SHOP_GROUP) && !shops.has(key)) shops.set(key, name);
-  });
-  return Array.from(shops.values());
-}
 function matchingShops(names, query) {
   var key = normKey(query);
   return names.filter(function (name) { return normKey(name).indexOf(key) >= 0; });
 }
-function shopOptionsHtml(names, locations, action, hasShops) {
+function shopOptionsHtml(names, action, hasShops) {
   return names.map(function (name) {
     return '<button type="button" class="overview-row" data-act="' + action + '" data-name="' + esc(name) + '"><span class="overview-label">' +
-      esc(name) + (locations.get(normKey(name)) === PROVISIONAL_SHOP_GROUP ? ' <small>（暫定）</small>' : '') + '</span>' + I.chevron + '</button>';
+      esc(name) + '</span>' + I.chevron + '</button>';
   }).join('') || '<p class="hint" role="status">' + (hasShops ? '一致する店舗がありません' : '選択できる店舗がありません。本部にご確認ください。') + '</p>';
 }
 function selectHomeShop(name) {
@@ -827,7 +853,6 @@ function selectHomeShop(name) {
   store.set('homeShop', name);
   st.listFilter = null;
 }
-var PROVISIONAL_SHOP_GROUP = normKey('PISTAグループ（暫定）');
 var STORE_GROUPS = { 'device:shopActive': '稼働中', 'device:shopFault': '故障', 'store:other': 'その他の状態' };
 function storeGroup(d) {
   switch (kindOf(d.st)) {
@@ -836,7 +861,7 @@ function storeGroup(d) {
     default: return 'store:other';
   }
 }
-function isInShop(d, shop) { return normKey(d.l) === normKey(shop); }
+function isInShop(d, shop) { return locationKey(d.l) === locationKey(shop); }
 function deviceGroup(d, locations) {
   var status = normKey(d.st);
   var kind = kindOf(d.st);
@@ -845,7 +870,7 @@ function deviceGroup(d, locations) {
   if (kind === '終了') return 'device:ended';
   if (!status || status === '未確認' || status === '未確認(PISTA取込)') return 'device:unverified';
   if (kind === '移動' || kind === '不明' || kind === '修理') return 'device:other';
-  var place = locations.get(normKey(d.l));
+  var place = locations.get(locationKey(d.l));
   if (place === '本部' && (kind === '正常' || kind === '故障' || kind === '保管')) return 'device:hq';
   if (place === '店舗' && kind === '正常') return 'device:shopActive';
   if (place === '店舗' && kind === '故障') return 'device:shopFault';
@@ -993,10 +1018,10 @@ function confirmModal(title, text, okLabel, danger) {
 function pickStore(title, current) {
   return new Promise(function (resolve) {
     var names = storeNames();
-    var recent = st.recentStores.filter(function (n) { return names.indexOf(n) >= 0; });
+    var recent = recentLocations(names);
     function itemHtml(n) {
       return '<button class="btn left" data-act="pick" data-name="' + esc(n) + '">' + I.pin + '<span class="grow">' + esc(n) + '</span>' +
-        (n === current ? '<span class="badge"><i style="background:var(--ok)"></i>いま</span>' : '') + '</button>';
+        (locationKey(n) === locationKey(current) ? '<span class="badge"><i style="background:var(--ok)"></i>いま</span>' : '') + '</button>';
     }
     function listHtml(q) {
       var k = normKey(q);
@@ -1246,7 +1271,7 @@ function handleCodes(codes, purpose) {
     values.map(function (v) {
       var d = st.devices.get(v);
       return '<button class="btn left" data-act="choose" data-serial="' + esc(v) + '"><span class="grow"><span class="mono">' + esc(v) + '</span><br><small>' +
-        (d ? esc(d.l) : '台帳にありません') + '</small></span>' + (d ? badge(d.st) : '') + '</button>';
+        (d ? esc(locationName(d.l)) : '台帳にありません') + '</small></span>' + (d ? badge(d.st) : '') + '</button>';
     }).join('') + '<button class="btn ghost" data-act="close">やめる</button></div>',
     { choose: function (el) { closeModal(); openSerial(el.getAttribute('data-serial')); }, close: function () { closeModal(); } });
 }
@@ -1289,7 +1314,7 @@ var Live = {
     this.pending = '';
     this.cool = {};
     this.count = 0;
-    $('#scanTitle').textContent = purpose === 'inv' ? '棚卸：' + (st.inv ? st.inv.location : '') : 'バーコードを読み取る';
+    $('#scanTitle').textContent = purpose === 'inv' ? '棚卸：' + (st.inv ? locationName(st.inv.location) : '') : 'バーコードを読み取る';
     $('#scanHint').textContent = purpose === 'inv' ? '1台ずつ、黄色いシールを枠に入れてください（縦でも横でもOK）' : '黄色いシールを枠に入れてください（縦でも横でもOK）';
     $('#scanDone').hidden = purpose !== 'inv';
     $('#scanLast').hidden = true;
@@ -1472,7 +1497,7 @@ screens.login = function (p) {
   function draw(query) {
     if (!ready) return;
     var names = homeShopNames();
-    options.innerHTML = shopOptionsHtml(matchingShops(names, query), overviewLocations(), 'loginShop', names.length);
+    options.innerHTML = shopOptionsHtml(matchingShops(names, query), 'loginShop', names.length);
     options.hidden = false;
   }
   if (ready && !st.homeShop && !isHeadOffice()) draw('');
@@ -1582,8 +1607,8 @@ screens.home = function () {
 
 function homeToolsHtml(shop) {
   var photo = scanMode() !== 'live';
-  var resume = st.inv && (!shop || normKey(st.inv.location) === normKey(shop));
-  return (resume ? '<button class="note info" data-act="resumeInv">' + I.clipboard + '<div><b>棚卸の途中です</b><br>' + esc(st.inv.location) + '・' + st.inv.items.length + '台読み取り済み<br><u>続きから再開する</u></div></button>' : '') +
+  var resume = st.inv && (!shop || locationKey(st.inv.location) === locationKey(shop));
+  return (resume ? '<button class="note info" data-act="resumeInv">' + I.clipboard + '<div><b>棚卸の途中です</b><br>' + esc(locationName(st.inv.location)) + '・' + st.inv.items.length + '台読み取り済み<br><u>続きから再開する</u></div></button>' : '') +
     '<div class="home-tools">' + scanButtonHtml('バーコードを読み取る', photo ? '黄色いシール全体を大きく撮影' : '黄色いシールを枠に合わせると自動読取') +
     '<div class="home-shortcuts"><button class="btn" data-act="goSearch">' + I.keyboard + '番号で探す</button>' +
     '<label class="btn" for="pickInput" role="button" tabindex="0">' + I.image + '写真から読む</label>' +
@@ -1769,13 +1794,13 @@ screens.pistaStatus = function (p) {
 };
 
 function paintStoreHome() {
-  var names = homeShopNames(), shop = st.homeShop, locations = overviewLocations();
+  var names = homeShopNames(), shop = st.homeShop;
   var refresh = '<button type="button" class="linklike" data-act="refresh">' + I.refresh + '最新の情報にする</button>';
   var html = '<div class="store-home"><form class="card store-picker" id="shopForm"><label for="homeShopQ">店舗名</label>' +
     '<div class="store-picker-field"><input type="search" id="homeShopQ" placeholder="店舗名を入力" autocomplete="off" value="' + esc(shop) + '">' +
     (shop ? '<button type="button" class="btn small" data-act="switchShop">切り替え</button>' : '') + '</div>' +
     '<div class="shop-options" id="homeShopOptions" role="group" aria-label="店舗候補"></div>' + (!names.length ? refresh : '') + '</form>';
-  if (shop) html += '<div id="shopHomeContent">' + storeStatusHtml(shop, locations.get(normKey(shop)) === PROVISIONAL_SHOP_GROUP) +
+  if (shop) html += '<div id="shopHomeContent">' + storeStatusHtml(shop) +
     '<details class="card store-tools"><summary>読み取り・棚卸などの操作</summary>' +
     homeToolsHtml(shop) + recentOpsHtml(shop) + refresh + '</details></div>';
   setView(html + '</div>', appName());
@@ -1785,7 +1810,7 @@ function paintStoreHome() {
   }
   function draw(namesToShow) {
     options.hidden = false;
-    options.innerHTML = shopOptionsHtml(namesToShow, locations, 'homeShop', names.length);
+    options.innerHTML = shopOptionsHtml(namesToShow, 'homeShop', names.length);
   }
   function choose(name) {
     if (names.indexOf(name) === -1) return;
@@ -1816,7 +1841,7 @@ function paintStoreHome() {
   });
 }
 
-function storeStatusHtml(shop, provisional) {
+function storeStatusHtml(shop) {
   var counts = Object.create(null), total = 0;
   st.devices.forEach(function (d) {
     if (!isInShop(d, shop)) return;
@@ -1831,7 +1856,7 @@ function storeStatusHtml(shop, provisional) {
   }
   return '<section class="card store-status" aria-labelledby="shopStatusTitle"><div class="overview-head"><h2 id="shopStatusTitle" tabindex="-1">' +
     esc(shop) + 'の稼働状況<small>登録' + total + '台</small></h2><img src="illustrations/impacttv-terminal.webp" alt="" width="50" height="50"></div>' +
-    (provisional ? '<p class="hint">台帳の登録先（暫定）</p>' : '') + '<div class="store-metrics">' +
+    '<div class="store-metrics">' +
     row('device:shopActive', I.shop, true) + row('device:shopFault', I.alert, true) + '</div>' +
     (counts['store:other'] ? row('store:other', I.list, false) : '') + '</section>';
 }
@@ -1885,8 +1910,8 @@ function addOp(o) {
 function recentOpsHtml(shop) {
   var ops = st.ops.filter(function (op) {
     if (!shop) return true;
-    if (op.location) return normKey(op.location) === normKey(shop);
-    if (!op.serial) return op.title === '棚卸：' + shop;
+    if (op.location) return locationKey(op.location) === locationKey(shop);
+    if (!op.serial) return typeof op.title === 'string' && op.title.indexOf('棚卸：') === 0 && locationKey(op.title.slice(3)) === locationKey(shop);
     var device = st.devices.get(op.serial);
     return device && isInShop(device, shop);
   }).slice(0, 5);
@@ -1947,7 +1972,7 @@ function deviceRowHtml(d) {
   var stale = isStale(d);
   return '<button class="li" data-act="openSerial" data-serial="' + esc(d.s) + '">' +
     '<span class="li-top"><span class="mono">' + esc(d.s) + '</span>' + badge(d.st) + '</span>' +
-    '<span class="li-sub">' + esc(d.l || '（場所なし）') + (d.p ? '・' + esc(d.p) : '') + (d.m ? '・' + esc(d.m) : '') + '</span>' +
+    '<span class="li-sub">' + esc(locationName(d.l) || '（場所なし）') + (d.p ? '・' + esc(d.p) : '') + (d.m ? '・' + esc(d.m) : '') + '</span>' +
     (isHeadOffice() ? '<span class="li-sub"><span class="row-contract-label">契約</span>　' + esc(contractLabel(d.c)) + '</span>' : '') +
     '<span class="li-sub' + (stale ? ' warn-text' : '') + '">' + (d.ck ? '確認：' + esc(ago(d.ck)) + (d.cb ? '（' + esc(d.cb) + '）' : '') : 'まだ読み取り確認されていません') + '</span>' +
     '</button>';
@@ -1976,7 +2001,7 @@ screens.list = function (p) {
   st.devices.forEach(function (d) {
     if (!matchesListScope(d, f, locations)) return;
     counts[d.st] = (counts[d.st] || 0) + 1;
-    locs[d.l] = 1;
+    locs[locationName(d.l)] = 1;
   });
   var order = storeNames();
   var locList = Object.keys(locs).sort(function (a, b) {
@@ -2014,14 +2039,15 @@ function paintList() {
     if (!matchesListScope(d, f, locations)) return;
     if (f.status && d.st !== f.status) return;
     if (f.stale && !isStale(d)) return;
-    if (f.loc && d.l !== f.loc) return;
-    if (qk && d.s.indexOf(qs) < 0 && normKey(d.l).indexOf(qk) < 0) return;
+    if (f.loc && !isInShop(d, f.loc)) return;
+    if (qk && d.s.indexOf(qs) < 0 && locationKey(d.l).indexOf(qk) < 0 && normKey(d.l).indexOf(qk) < 0) return;
     rows.push(d);
   });
   var order = storeNames();
   rows.sort(function (a, b) {
-    var ia = order.indexOf(a.l), ib = order.indexOf(b.l);
-    return (ia < 0 ? 9999 : ia) - (ib < 0 ? 9999 : ib) || (a.l < b.l ? -1 : a.l > b.l ? 1 : 0) || (a.s < b.s ? -1 : 1);
+    var placeA = locationName(a.l), placeB = locationName(b.l);
+    var ia = order.indexOf(placeA), ib = order.indexOf(placeB);
+    return (ia < 0 ? 9999 : ia) - (ib < 0 ? 9999 : ib) || (placeA < placeB ? -1 : placeA > placeB ? 1 : 0) || (a.s < b.s ? -1 : 1);
   });
   var shown = rows.slice(0, f.limit);
   $('#listBody').innerHTML = '<h2 class="sec">' + rows.length + '台</h2>' +
@@ -2106,7 +2132,7 @@ function paintDevice() {
   }
   html += '<div class="card">' +
     '<div class="serial">' + esc(d.serial) + '</div>' +
-    '<div class="place">' + I.pin + '<span>' + esc(d.location || '（場所なし）') + (d.spot ? '<br><small style="font-weight:600;color:var(--muted)">' + esc(d.spot) + '</small>' : '') + '</span></div>' +
+    '<div class="place">' + I.pin + '<span>' + esc(locationName(d.location) || '（場所なし）') + (d.spot ? '<br><small style="font-weight:600;color:var(--muted)">' + esc(d.spot) + '</small>' : '') + '</span></div>' +
     '<dl class="device-summary"><div><dt>端末の状態</dt><dd>' + pill(d.status) + '</dd></div>' +
     '<div><dt>契約状況</dt><dd>' + esc(contractLabel(d.contract)) + '</dd></div></dl>' +
     '<p class="hint">' + contractHelp + '</p>' +
@@ -2135,7 +2161,7 @@ function paintDevice() {
   var banner = {
     '故障': ['danger', '故障・不具合として報告されています'],
     '修理': ['warn', '修理・交換に出している端末です'],
-    '移動': ['info', '移動中の端末です（行き先：' + (d.location || '未設定') + '）'],
+    '移動': ['info', '移動中の端末です（行き先：' + (locationName(d.location) || '未設定') + '）'],
     '不明': ['warn', '所在不明になっている端末です']
   }[kind];
   if (banner) html += '<div class="note ' + banner[0] + '">' + I.alert + '<div><b>' + esc(banner[1]) + '</b></div></div>';
@@ -2201,7 +2227,7 @@ function initForm(p, d) {
   var normal = normalStatus();
   var f = {
     key: p.key, type: p.type, serial: p.serial, opId: newId(), baseRev: d ? d.rev : 0,
-    status: d ? d.status : normal, location: d ? d.location : (st.recentStores[0] || ''), spot: d ? d.spot : '',
+    status: d ? d.status : normal, location: d ? d.location : (recentLocations(storeNames())[0] || ''), spot: d ? d.spot : '',
     memo: d ? d.memo : '', model: d ? d.model : inferModel(p.serial), symptoms: [], comment: '', photos: [],
     current: d
   };
@@ -2232,7 +2258,7 @@ function paintForm() {
   var d = F.current;
   var titles = { report: '故障・不具合の報告', move: '別の場所へ移動', status: '状態・メモの変更', new: '端末の新規登録', dispose: '廃棄を記録' };
   var html = '<div class="card" style="padding:12px 16px"><div class="serial" style="font-size:21px;margin:0">' + esc(F.serial) + '</div>' +
-    (d ? '<div class="li-sub">' + esc(d.location) + (d.spot ? '・' + esc(d.spot) : '') + '　' + badge(d.status) + '</div>' : '') + '</div>';
+    (d ? '<div class="li-sub">' + esc(locationName(d.location)) + (d.spot ? '・' + esc(d.spot) : '') + '　' + badge(d.status) + '</div>' : '') + '</div>';
   var showSymptoms = F.type === 'report' || ((F.type === 'status' || F.type === 'new') && kindOf(F.status) === '故障');
   if (F.type === 'dispose') {
     html += '<div class="note warn">' + I.alert + '<div><b>本部で廃棄を確認した端末に使います。</b><br>台帳と履歴は残り、棚卸の対象外になります。</div></div>' +
@@ -2316,7 +2342,7 @@ function paintForm() {
 
 function pickerHtml(value) {
   return '<button type="button" class="picker" data-act="pickLoc">' + I.pin + '<span class="grow">' +
-    (value ? esc(value) : '<span class="ph">タップして選ぶ</span>') + '</span>' + I.chevron + '</button>';
+    (value ? esc(locationName(value)) : '<span class="ph">タップして選ぶ</span>') + '</span>' + I.chevron + '</button>';
 }
 
 async function submitForm() {
@@ -2330,7 +2356,7 @@ async function submitForm() {
   }
   if ((F.type === 'new' || F.type === 'move') && !F.location) { toast(F.type === 'move' ? '移動先を選んでください' : '設置場所を選んでください'); globalActsPick(); return; }
   if (F.type === 'report' && !F.symptoms.length && !F.comment.trim()) { toast('症状を選ぶか、様子を書いてください'); return; }
-  if (F.type === 'move' && d && normKey(F.location) === normKey(d.location) && F.moveState === 'keep' && F.spot === d.spot) { toast('今と同じ場所です'); return; }
+  if (F.type === 'move' && d && locationKey(F.location) === locationKey(d.location) && F.moveState === 'keep' && F.spot === d.spot) { toast('今と同じ場所です'); return; }
   if (F.type === 'new' && !patternOk(F.serial)) {
     var yes = await confirmModal('このまま登録しますか？', F.serial + '\n\nいつもの番号の形と違います。読み取りミスの可能性があります。', '登録する');
     if (!yes) return;
@@ -2406,10 +2432,10 @@ screens.done = function (p) {
     var d = p.device;
     html += '<h1 class="done-title">「' + esc(p.op) + '」を記録しました</h1>' +
       '<div class="card center" style="margin-top:14px"><div class="serial" style="font-size:20px;margin:0 0 6px">' + esc(d.serial) + '</div>' +
-      pill(d.status) + '<div class="place" style="justify-content:center">' + I.pin + '<span>' + esc(d.location) + (d.spot ? '・' + esc(d.spot) : '') + '</span></div></div>';
+      pill(d.status) + '<div class="place" style="justify-content:center">' + I.pin + '<span>' + esc(locationName(d.location)) + (d.spot ? '・' + esc(d.spot) : '') + '</span></div></div>';
   } else if (p.kind === 'inv') {
     var c = p.counts;
-    html += '<h1 class="done-title">棚卸を確定しました</h1><div class="card"><div class="label">' + esc(p.location) + '</div><dl class="kv">' +
+    html += '<h1 class="done-title">棚卸を確定しました</h1><div class="card"><div class="label">' + esc(locationName(p.location)) + '</div><dl class="kv">' +
       '<dt>確認した端末</dt><dd>' + c.checked + '台</dd>' +
       (c.moved ? '<dt>この場所へ移動</dt><dd>' + c.moved + '台</dd>' : '') +
       (c.registered ? '<dt>新しく登録</dt><dd>' + c.registered + '台</dd>' : '') +
@@ -2454,20 +2480,22 @@ async function doUndo(opId) {
 function saveInv() { if (st.inv) store.set('inv', st.inv); else store.del('inv'); }
 function invTargetKinds(k) { return k === '正常' || k === '故障' || k === '保管' || k === '不明' || k === ''; }
 function invExpected() {
-  var loc = normKey(st.inv.location);
   var out = [];
-  st.devices.forEach(function (d) { if (normKey(d.l) === loc && invTargetKinds(kindOf(d.st))) out.push(d); });
+  st.devices.forEach(function (d) { if (isInShop(d, st.inv.location) && invTargetKinds(kindOf(d.st))) out.push(d); });
   return out;
 }
 
 screens.invPick = function () {
-  var names = storeNames();
+  var names = isHeadOffice() ? storeNames() : homeShopNames();
   var selected = !isHeadOffice() && names.indexOf(st.homeShop) >= 0 ? [st.homeShop] : [];
-  var counts = {};
-  st.devices.forEach(function (d) { if (invTargetKinds(kindOf(d.st))) counts[d.l] = (counts[d.l] || 0) + 1; });
+  var counts = Object.create(null);
+  st.devices.forEach(function (d) {
+    var name = locationName(d.l);
+    if (invTargetKinds(kindOf(d.st))) counts[name] = (counts[name] || 0) + 1;
+  });
   var html = '';
   if (st.inv) {
-    html += '<div class="card"><div class="label">途中の棚卸があります</div><p style="margin:0 0 12px"><b>' + esc(st.inv.location) + '</b>・' + st.inv.items.length + '台読み取り済み</p>' +
+    html += '<div class="card"><div class="label">途中の棚卸があります</div><p style="margin:0 0 12px"><b>' + esc(locationName(st.inv.location)) + '</b>・' + st.inv.items.length + '台読み取り済み</p>' +
       '<div class="stack"><button class="btn primary" data-act="resumeInv">続きから再開する</button><button class="btn ghost" data-act="discard">破棄して新しく始める</button></div></div>';
   }
   html += '<p class="hint" style="margin:0 4px 12px">棚卸では、その場所にある端末をまとめて読み取り、台帳との違い（見つからない・別の場所で登録されている・未登録）を確認できます。</p>';
@@ -2475,7 +2503,7 @@ screens.invPick = function () {
   setView(html, '棚卸：場所を選ぶ');
   var draw = function (q) {
     var k = normKey(q);
-    var recent = st.recentStores.filter(function (n) { return names.indexOf(n) >= 0; });
+    var recent = recentLocations(names);
     var list = k ? matchingShops(names, q) : uniq(selected.concat(recent, names));
     $('#invStores').innerHTML = list.map(function (n) {
       return '<button class="btn left" data-act="startInv" data-name="' + esc(n) + '">' + I.pin + '<span class="grow">' + esc(n) + '</span><small style="color:var(--muted)">台帳 ' + (counts[n] || 0) + '台</small></button>';
@@ -2489,7 +2517,7 @@ screens.invPick = function () {
   };
   acts.startInv = async function (el) {
     var n = el.getAttribute('data-name');
-    if (st.inv && st.inv.items.length && !(await confirmModal('途中の棚卸を破棄しますか？', st.inv.location + 'で読み取った' + st.inv.items.length + '台の記録は保存されません。', '破棄して始める', true))) return;
+    if (st.inv && st.inv.items.length && !(await confirmModal('途中の棚卸を破棄しますか？', locationName(st.inv.location) + 'で読み取った' + st.inv.items.length + '台の記録は保存されません。', '破棄して始める', true))) return;
     st.inv = { location: n, items: [], startedAt: Date.now(), last: null };
     saveInv();
     rememberStore(n);
@@ -2513,9 +2541,9 @@ function invAdd(raw, silent) {
       if (topName() === 'inv') render(); else if (!silent) toast(res.text);
       return res;
     }
-    var kind = !d ? 'new' : (normKey(d.l) !== normKey(st.inv.location) ? 'moved' : 'ok');
+    var kind = !d ? 'new' : (isInShop(d, st.inv.location) ? 'ok' : 'moved');
     st.inv.items.unshift({ s: s, t: Date.now(), kind: kind });
-    res = { kind: kind, s: s, text: kind === 'ok' ? s + '：OK' : kind === 'new' ? s + '：台帳にない端末' : s + '：台帳では「' + d.l + '」' };
+    res = { kind: kind, s: s, text: kind === 'ok' ? s + '：OK' : kind === 'new' ? s + '：台帳にない端末' : s + '：台帳では「' + locationName(d.l) + '」' };
   }
   st.inv.last = res;
   saveInv();
@@ -2534,7 +2562,7 @@ function invManual() {
   inp.addEventListener('input', function () {
     var m = inp.value.trim().length >= 3 ? matchSerials(inp.value, 6) : [];
     $('#invManSug').innerHTML = m.length ? '<div class="stack" style="margin-bottom:12px">' + m.map(function (d) {
-      return '<button type="button" class="btn left small" style="width:100%" data-act="pickSug" data-serial="' + esc(d.s) + '"><span class="mono grow">' + esc(d.s) + '</span><small>' + esc(d.l) + '</small></button>';
+      return '<button type="button" class="btn left small" style="width:100%" data-act="pickSug" data-serial="' + esc(d.s) + '"><span class="mono grow">' + esc(d.s) + '</span><small>' + esc(locationName(d.l)) + '</small></button>';
     }).join('') + '</div>' : '';
   });
   $('#invManForm').addEventListener('submit', function (e) {
@@ -2557,7 +2585,7 @@ screens.inv = function () {
   var notYet = expected.filter(function (d) { return !scanned[d.s]; });
   var pct = expected.length ? Math.round(foundExpected / expected.length * 100) : 0;
   var live = scanMode() === 'live';
-  var html = '<div class="card"><div class="label">棚卸中の場所</div><div style="font-size:19px;font-weight:800">' + esc(inv.location) + '</div>' +
+  var html = '<div class="card"><div class="label">棚卸中の場所</div><div style="font-size:19px;font-weight:800">' + esc(locationName(inv.location)) + '</div>' +
     '<div class="progress" aria-hidden="true"><i style="width:' + pct + '%"></i></div>' +
     '<div class="li-sub">台帳の ' + expected.length + '台中 <b style="color:var(--ink)">' + foundExpected + '台</b> を確認・読み取り合計 ' + inv.items.length + '台</div></div>';
   if (inv.last) {
@@ -2575,7 +2603,7 @@ screens.inv = function () {
       inv.items.map(function (it, idx) {
         var d = st.devices.get(it.s);
         var k = it.kind;
-        var sub = k === 'ok' ? '台帳どおり' : k === 'new' ? '台帳にない端末' : '台帳では「' + (d ? d.l : '') + '」';
+        var sub = k === 'ok' ? '台帳どおり' : k === 'new' ? '台帳にない端末' : '台帳では「' + (d ? locationName(d.l) : '') + '」';
         return '<div class="li"><span class="kind ' + k + '">' + (k === 'ok' ? I.check : k === 'new' ? I.plus : I.move) + '</span>' +
           '<div class="li-main"><span class="li-top"><span class="mono">' + esc(it.s) + '</span>' + (d ? badge(d.st) : '') + '</span><span class="li-sub">' + esc(sub) + '</span></div>' +
           '<button class="x-btn" data-act="rm" data-i="' + idx + '" aria-label="' + esc(it.s) + 'を取り消す">' + I.x + '</button></div>';
@@ -2607,14 +2635,14 @@ screens.invDone = function () {
   inv.items.forEach(function (i) {
     var d = st.devices.get(i.s);
     if (!d) { news.push(i.s); return; }
-    if (normKey(d.l) !== normKey(inv.location)) moved.push(d); else ok.push(d);
+    if (isInShop(d, inv.location)) ok.push(d); else moved.push(d);
     var k = kindOf(d.st);
     if (k === '不明' || k === '移動') revive.push(d);
   });
   var missing = expected.filter(function (d) { return !scanned[d.s]; });
   var sel = inv.sel = inv.sel || { move: true, reg: true, revive: true, missing: false };
   var lost = statusByKind('不明');
-  var html = '<div class="card"><div class="label">場所</div><div style="font-size:19px;font-weight:800">' + esc(inv.location) + '</div>' +
+  var html = '<div class="card"><div class="label">場所</div><div style="font-size:19px;font-weight:800">' + esc(locationName(inv.location)) + '</div>' +
     '<dl class="kv"><dt>台帳どおり</dt><dd><b>' + ok.length + '台</b></dd><dt>読み取り合計</dt><dd>' + inv.items.length + '台</dd></dl></div>';
   var block = function (key, title, list, label, cls, fmt) {
     if (!list.length) return '';
@@ -2622,8 +2650,8 @@ screens.invDone = function () {
       '<div class="li-sub" style="margin-bottom:6px">' + list.slice(0, 30).map(fmt).join('<br>') + (list.length > 30 ? '<br>ほか' + (list.length - 30) + '台' : '') + '</div>' +
       '<label class="check"><input type="checkbox" data-sel="' + key + '"' + (sel[key] ? ' checked' : '') + '><span>' + label + '</span></label></div>';
   };
-  html += block('move', '別の場所で登録されていた端末', moved, 'この場所（' + esc(inv.location) + '）へ移動したことにする', 'moved',
-    function (d) { return '<span class="mono">' + esc(d.s) + '</span>（台帳：' + esc(d.l) + '）'; });
+  html += block('move', '別の場所で登録されていた端末', moved, 'この場所（' + esc(locationName(inv.location)) + '）へ移動したことにする', 'moved',
+    function (d) { return '<span class="mono">' + esc(d.s) + '</span>（台帳：' + esc(locationName(d.l)) + '）'; });
   html += block('reg', '台帳にない端末', news, 'この場所の端末として登録する（' + esc(normalStatus()) + '）', 'new',
     function (s) { return '<span class="mono">' + esc(s) + '</span>' + (patternOk(s) ? '' : ' <b class="warn-text">形式が違います</b>'); });
   html += block('revive', '移動中・所在不明になっていた端末', revive, esc(normalStatus()) + 'に戻す', 'ok',
