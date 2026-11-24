@@ -1673,12 +1673,18 @@ function paintDevice() {
   var kind = info.kind;
   var normal = normalStatus();
   var needsHeadOffice = d.status === '廃棄' && !isHeadOffice();
+  var contractHelp = '契約の確認は本部へ。';
+  if (kind === '終了') {
+    contractHelp = '棚卸の対象外です。契約・返却の確認は本部へ。';
+  } else if (['contract:requested', 'contract:ended', 'contract:excluded'].indexOf(contractGroup(d.contract)) === -1) {
+    contractHelp = (kind === '正常' ? '端末が正常でも、' : '') + '解約をご希望の場合は本部にご連絡ください。';
+  }
   html += '<div class="card">' +
     '<div class="serial">' + esc(d.serial) + '</div>' +
     '<div class="place">' + I.pin + '<span>' + esc(d.location || '（場所なし）') + (d.spot ? '<br><small style="font-weight:600;color:var(--muted)">' + esc(d.spot) + '</small>' : '') + '</span></div>' +
     '<dl class="device-summary"><div><dt>端末の状態</dt><dd>' + pill(d.status) + '</dd></div>' +
     '<div><dt>契約状況</dt><dd>' + esc(contractLabel(d.contract)) + '</dd></div></dl>' +
-    (kind === '終了' ? '<p class="hint">棚卸の対象外です。返却や解約の状況は別途確認してください。</p>' : '') +
+    '<p class="hint">' + contractHelp + '</p>' +
     '<dl class="kv">' +
     (d.symptom ? '<dt>症状</dt><dd>' + esc(d.symptom) + '</dd>' : '') +
     (d.model ? '<dt>機種</dt><dd>' + esc(d.model) + '</dd>' : '') +
@@ -1693,7 +1699,7 @@ function paintDevice() {
       '<button class="btn" data-act="headOffice">本部として認証する</button></div>';
   } else if (kind !== '終了') {
     html += '<details class="end-actions"><summary>利用終了の手続き</summary>' +
-      '<p class="hint">契約の解約は経理へ。端末の廃棄は本部で記録します。</p>' +
+      '<p class="hint">端末の廃棄は本部で記録します。</p>' +
       (disposalStatus() ? '<button class="btn danger" data-act="dispose"' + (c.loading || c.error ? ' disabled' : '') + '>' + I.clipboard + '廃棄を記録（本部専用）</button>' : '') +
       '</details>';
   }
@@ -1891,7 +1897,7 @@ async function submitForm() {
     if (!isHeadOffice()) { go('headOffice', { returnSerial: F.serial, returnForm: topParams() }); return; }
     if (!F.comment.trim()) { toast('本部での確認結果・廃棄理由を入力してください'); return; }
     if (!disposalStatus() || !d || d.status === '廃棄') { toast('最新の状態を確認してください'); return; }
-    if (!(await confirmModal('廃棄を記録しますか？', F.serial + '\n' + d.location + '\n\n理由：' + F.comment.trim() + '\n\n契約の解約は別途手続きしてください。', '廃棄を記録する', true))) return;
+    if (!(await confirmModal('廃棄を記録しますか？', F.serial + '\n' + d.location + '\n\n理由：' + F.comment.trim() + '\n\n契約の解約は別途、本部で手続きしてください。', '廃棄を記録する', true))) return;
   }
   if ((F.type === 'new' || F.type === 'move') && !F.location) { toast(F.type === 'move' ? '移動先を選んでください' : '設置場所を選んでください'); globalActsPick(); return; }
   if (F.type === 'report' && !F.symptoms.length && !F.comment.trim()) { toast('症状を選ぶか、様子を書いてください'); return; }
